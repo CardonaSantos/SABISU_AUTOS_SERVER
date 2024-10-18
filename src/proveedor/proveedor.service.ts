@@ -28,8 +28,8 @@ export class ProveedorService {
           pais: createProveedorDto.pais,
           ciudad: createProveedorDto.ciudad,
           codigoPostal: createProveedorDto.codigoPostal,
-          latitud: parseFloat(createProveedorDto.latitud),
-          longitud: parseFloat(createProveedorDto.longitud),
+          // latitud: parseFloat(createProveedorDto.latitud),
+          // longitud: parseFloat(createProveedorDto.longitud),
           notas: createProveedorDto.notas || null, // Opción por si es un campo opcional
         },
       });

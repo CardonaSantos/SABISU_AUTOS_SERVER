@@ -25,17 +25,21 @@ export class AuthService {
 
   // Generar el JWT sin usar estrategias avanzadas
   async login(email: string, contrasena: string) {
-    const usuario = await this.validarUsuario(email, contrasena);
-    const payload = {
-      nombre: usuario.nombre,
-      correo: usuario.correo,
-      sub: usuario.id,
-      rol: usuario.rol,
-      activo: usuario.activo,
-    };
-    return {
-      access_token: this.jwtService.sign(payload), // Genera el token JWT
-    };
+    try {
+      const usuario = await this.validarUsuario(email, contrasena);
+      const payload = {
+        nombre: usuario.nombre,
+        correo: usuario.correo,
+        sub: usuario.id,
+        rol: usuario.rol,
+        activo: usuario.activo,
+      };
+      return {
+        access_token: this.jwtService.sign(payload), // Genera el token JWT
+      };
+    } catch (error) {
+      console.log(error);
+    }
   }
 
   // Registrar un nuevo usuario con contraseñas hasheadas
