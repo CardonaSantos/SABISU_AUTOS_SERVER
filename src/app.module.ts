@@ -12,6 +12,7 @@ import { VentaProductoModule } from './venta-producto/venta-producto.module';
 import { EntregaStockModule } from './entrega-stock/entrega-stock.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { AuthModule } from './auth/auth.module';
+import { ConfigModule } from '@nestjs/config';
 
 @Module({
   imports: [
@@ -26,6 +27,9 @@ import { AuthModule } from './auth/auth.module';
     EntregaStockModule,
     AnalyticsModule,
     AuthModule,
+    ConfigModule.forRoot({
+      isGlobal: true, // Hace que ConfigService esté disponible en toda la aplicación
+    }),
   ],
   controllers: [AppController],
   providers: [AppService],
