@@ -20,4 +20,7 @@ export class CreateEntregaStockDto {
 
   @IsInt()
   recibidoPorId: number;
+
+  @IsInt()
+  sucursalId: number;
 }

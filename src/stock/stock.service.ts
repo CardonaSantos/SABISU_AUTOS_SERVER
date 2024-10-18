@@ -14,7 +14,7 @@ export class StockService {
 
   async create(createStockDto: StockEntryDTO) {
     try {
-      const { proveedorId, stockEntries } = createStockDto;
+      const { proveedorId, stockEntries, sucursalId } = createStockDto;
 
       // Calcular el costo total de la entrega sumando los productos
       const costoStockEntrega = stockEntries.reduce(
@@ -45,6 +45,7 @@ export class StockService {
             fechaVencimiento: entry.fechaVencimiento,
             precioCosto: entry.precioCosto,
             entregaStockId: newRegistDeliveryStock.id, // Asociar con la entrega
+            sucursalId: sucursalId,
           },
         });
 

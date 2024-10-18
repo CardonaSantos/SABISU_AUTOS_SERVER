@@ -22,11 +22,11 @@ export class UserService {
     }
   }
 
-  async findByGmail(email: string) {
+  async findByGmail(correo: string) {
     try {
       const user = await this.prisma.usuario.findUnique({
         where: {
-          correo: email,
+          correo: correo,
         },
       });
 

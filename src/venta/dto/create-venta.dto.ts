@@ -1,5 +1,5 @@
 import { MetodoPago } from '@prisma/client';
-import { IsDate, IsArray, IsEnum, IsNumber } from 'class-validator';
+import { IsDate, IsArray, IsEnum, IsNumber, IsInt } from 'class-validator';
 
 export class CreateVentaDto {
   @IsNumber()
@@ -13,4 +13,7 @@ export class CreateVentaDto {
 
   @IsNumber()
   monto: number;
+
+  @IsInt()
+  sucursalId: number;
 }

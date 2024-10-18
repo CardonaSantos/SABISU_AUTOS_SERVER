@@ -132,6 +132,13 @@ export class ProductsService {
   }
 
   async update(id: number, updateProductDto: UpdateProductDto) {
+    console.log(
+      'Los datos a usar son: ID: ',
+      id,
+      ' LOS OTROS DATOS: ',
+      updateProductDto,
+    );
+
     try {
       const productoUpdate = await this.prisma.producto.update({
         where: { id },
@@ -141,13 +148,19 @@ export class ProductsService {
           precioVenta: updateProductDto.precioVenta,
           descripcion: updateProductDto.descripcion,
           categorias: {
-            //conectar por medio del id de la categoria del array enviado
+            set: [], // Eliminar todas las relaciones previas
             connect: updateProductDto.categorias?.map((categoriaId) => ({
               id: categoriaId,
             })),
           },
         },
+        include: {
+          categorias: true, // Asegurarte de que se incluyan las categorías en la respuesta
+        },
       });
+
+      console.log('El producto editado es: ', productoUpdate);
+
       return productoUpdate;
     } catch (error) {
       console.log(error);

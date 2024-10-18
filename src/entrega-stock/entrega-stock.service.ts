@@ -29,6 +29,17 @@ export class EntregaStockService {
               fechaIngreso: new Date(),
               precioCosto: stock.precioCosto,
               fechaVencimiento: stock.fechaVencimiento || null, // Manejar fecha opcional
+
+              producto: {
+                connect: {
+                  id: stock.productoId,
+                },
+              },
+              sucursal: {
+                connect: {
+                  id: createEntregaStockDto.sucursalId,
+                },
+              },
             })),
           },
         },

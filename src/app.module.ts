@@ -13,6 +13,8 @@ import { EntregaStockModule } from './entrega-stock/entrega-stock.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { AuthModule } from './auth/auth.module';
 import { ConfigModule } from '@nestjs/config';
+import { SucursalesModule } from './sucursales/sucursales.module';
+import { TransferenciaProductoModule } from './transferencia-producto/transferencia-producto.module';
 
 @Module({
   imports: [
@@ -30,6 +32,8 @@ import { ConfigModule } from '@nestjs/config';
     ConfigModule.forRoot({
       isGlobal: true, // Hace que ConfigService esté disponible en toda la aplicación
     }),
+    SucursalesModule,
+    TransferenciaProductoModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -27,6 +27,8 @@ model Producto {
   actualizadoEn     DateTime         @updatedAt
   HistorialStock HistorialStock[]
   HistorialPrecio HistorialPrecio[]
+
+  TransferenciaProducto TransferenciaProducto[]
 }
 
 model HistorialPrecio {
@@ -50,6 +52,25 @@ model Stock {
   producto        Producto     @relation(fields: [productoId], references: [id], onDelete: Cascade)
   entregaStockId  Int?         // Puede ser nulo si no está relacionado con una entrega específica
   entregaStock    EntregaStock? @relation(fields: [entregaStockId], references: [id], onDelete: SetNull)
+  //OTROS
+  sucursal        Sucursal     @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+  sucursalId      Int          // NUEVO: Relación con la sucursal
+
+}
+
+model Sucursal {
+  id              Int         @id @default(autoincrement())
+  nombre          String      // Nombre de la sucursal
+  direccion       String?     // Dirección física de la sucursal
+  telefono        String?     // Teléfono de contacto
+  productos       Stock[]     // Relación con el stock de productos de la sucursal
+  usuarios        Usuario[]   // Relación con los empleados de la sucursal
+  creadoEn        DateTime    @default(now())
+  actualizadoEn   DateTime    @updatedAt
+  tipoSucursal    TipoSucursal
+  estadoOperacion   Boolean   @default(true) // Activa o inactiva
+  Venta Venta[]
+  TransferenciaProducto TransferenciaProducto[] @relation("SucursalOrigen")
 }
 
 model EntregaStock {
@@ -61,6 +82,20 @@ model EntregaStock {
   stockEntregado  Stock[]     // Relación con Stock
   recibidoPorId   Int?        // Usuario que recibió la entrega (puede ser opcional)
   usuarioRecibido Usuario?    @relation("UsuarioRecibido", fields: [recibidoPorId], references: [id], onDelete: SetNull)
+}
+
+model Usuario {
+  id              Int              @id @default(autoincrement())
+  nombre          String
+  rol             Rol              // Rol del usuario
+  contrasena      String
+  activo          Boolean           @default(true)
+  entregasRecibidas EntregaStock[]  @relation("UsuarioRecibido")
+  correo String @unique
+  //OTROS
+  sucursalId      Int              // NUEVO: Relación con la sucursal
+  sucursal        Sucursal         @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+  TransferenciaProducto TransferenciaProducto[]
 }
 
 model Cliente {
@@ -77,8 +112,6 @@ model Cliente {
   departamentoId  Int?         // EN UBICACION TABLA
   departamento    Departamento? @relation(fields: [departamentoId], references: [id], onDelete: SetNull) // EN UBICACION TABLA
 }
-
-
 
 enum MetodoPago {
   CONTADO
@@ -97,7 +130,6 @@ model Pago {
   fechaPago       DateTime  @default(now())
 }
 
-
 model HistorialStock {
   id              Int         @id @default(autoincrement())
   productoId      Int
@@ -106,6 +138,7 @@ model HistorialStock {
   fechaCambio     DateTime    @default(now())
   producto        Producto    @relation(fields: [productoId], references: [id], onDelete: Cascade)
 }
+
 model Venta {
   id              Int         @id @default(autoincrement())
   clienteId       Int?        // Relación opcional con un cliente//ENVIAR:OPCIONAL
@@ -115,9 +148,25 @@ model Venta {
   productos       VentaProducto[]//ENVIAR
   totalVenta      Float       // Total de la venta//ENVIAR
   metodoPago      Pago?       // Cambia esto para permitir null
-
+  //OTROS
+  sucursalId      Int         // NUEVO: Relación con la sucursal que hizo la venta
+  sucursal        Sucursal    @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
 }
 
+model TransferenciaProducto {
+  id                Int         @id @default(autoincrement())
+  productoId        Int         // Producto que se transfiere
+  producto          Producto    @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  cantidad          Int         // Cantidad de producto transferido
+  sucursalOrigenId  Int         // Sucursal de origen
+  sucursalOrigen    Sucursal    @relation("SucursalOrigen", fields: [sucursalOrigenId], references: [id], onDelete: Cascade)
+  sucursalDestinoId Int         // Sucursal de destino
+  fechaTransferencia DateTime   @default(now())
+
+  usuarioEncargadoId Int?        // Relación con el usuario que hace la transferencia
+  usuarioEncargado   Usuario?    @relation(fields: [usuarioEncargadoId], references: [id], onDelete: SetNull)
+}
+  
 model VentaProducto {
   id              Int         @id @default(autoincrement())
   ventaId         Int         // Relación con la venta
@@ -127,7 +176,6 @@ model VentaProducto {
   producto        Producto    @relation(fields: [productoId], references: [id], onDelete: Cascade)
   creadoEn        DateTime    @default(now())  // Fecha de creación del registro
 }
-
 
 model Proveedor {
   id              Int              @id @default(autoincrement())
@@ -158,16 +206,6 @@ model Categoria {
   productos       Producto[]       @relation(name: "CategoriaToProducto")
 }
 
-model Usuario {
-  id              Int              @id @default(autoincrement())
-  nombre          String
-  rol             Rol              // Rol del usuario
-  contrasena      String
-  activo          Boolean           @default(true)
-  entregasRecibidas EntregaStock[]  @relation("UsuarioRecibido")
-  correo String @unique
-}
-
 model Departamento {
   id              Int         @id @default(autoincrement())
   nombre          String      @unique
@@ -185,5 +223,14 @@ model Municipio {
 
 enum Rol {
   ADMIN
+  MANAGER
   VENDEDOR
+}
+
+enum TipoSucursal {
+  TIENDA
+  ALMACEN
+  CENTRO_DISTRIBUCION
+  TALLER
+  OFICINA
 }

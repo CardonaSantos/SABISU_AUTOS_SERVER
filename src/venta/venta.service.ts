@@ -108,6 +108,11 @@ export class VentaService {
             : undefined,
           horaVenta: new Date(),
           totalVenta,
+          sucursal: {
+            connect: {
+              id: createVentaDto.sucursalId,
+            },
+          },
           productos: {
             create: productosConsolidados.map((prod) => ({
               producto: { connect: { id: prod.productoId } },

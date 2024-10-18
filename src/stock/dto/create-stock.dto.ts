@@ -42,6 +42,9 @@ export class StockEntryDTO {
   proveedorId: number;
 
   @IsInt()
+  sucursalId: number;
+
+  @IsInt()
   @IsOptional()
   recibidoPorId: number;
 

@@ -14,8 +14,10 @@ export class AuthService {
     private readonly jwtService: JwtService, ///DE LA DEPENDENCIA
   ) {}
 
-  async validarUsuario(email: string, contraseña: string): Promise<any> {
-    const usuario = await this.userService.findByGmail(email);
+  async validarUsuario(correo: string, contraseña: string): Promise<any> {
+    const usuario = await this.userService.findByGmail(correo);
+    console.log('Validando usuario con correo:', correo);
+    console.log('Usuario encontrado:', usuario);
 
     if (usuario && (await bcrypt.compare(contraseña, usuario.contrasena))) {
       return usuario;
@@ -24,9 +26,9 @@ export class AuthService {
   }
 
   // Generar el JWT sin usar estrategias avanzadas
-  async login(email: string, contrasena: string) {
+  async login(correo: string, contrasena: string) {
     try {
-      const usuario = await this.validarUsuario(email, contrasena);
+      const usuario = await this.validarUsuario(correo, contrasena);
       const payload = {
         nombre: usuario.nombre,
         correo: usuario.correo,
@@ -50,7 +52,7 @@ export class AuthService {
 
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(createAuthDto.contrasena, salt);
-      const { nombre, rol, correo } = createAuthDto;
+      const { nombre, rol, correo, sucursalId } = createAuthDto;
       // Creamos el usuario
       const nuevoUsuario = await this.userService.create({
         nombre,
@@ -58,6 +60,7 @@ export class AuthService {
         rol,
         correo,
         activo: true,
+        sucursalId,
       });
 
       //EL PAYLOAD SE PUEDE CREAR CUANDO YA TENEMOS EL USER

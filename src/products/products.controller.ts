@@ -47,6 +47,8 @@ export class ProductsController {
     @Param('id', ParseIntPipe) id: number,
     @Body() updateProductDto: UpdateProductDto,
   ) {
+    console.log('eN EL CONTROLLER NOS LLEGA: ', updateProductDto);
+
     return await this.productsService.update(id, updateProductDto);
   }
 

@@ -22,8 +22,8 @@ export class AuthController {
   }
 
   @Post('/login-user')
-  loginUserWithAuth(@Body() loginUserDto: LoginDto) {
-    return this.authService.login(loginUserDto.email, loginUserDto.contrasena);
+  loginUserWithAuth(@Body() correo: string, contrasena: string) {
+    return this.authService.login(correo, contrasena);
   }
 
   @Post()
