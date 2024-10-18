@@ -1,0 +1,189 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+
+model Producto {
+  id                Int              @id @default(autoincrement())
+  nombre            String
+  descripcion       String?
+  precioVenta       Float            // Precio al que se vende el producto
+  stock             Stock[]          // Relación con Stock
+  categorias        Categoria[]      @relation(name: "CategoriaToProducto")
+  ventas            VentaProducto[]  // Relación con productos vendidos en varias ventas
+  codigoProducto    String           @unique  // NUEVO A APLICAR
+  creadoEn          DateTime         @default(now())
+  actualizadoEn     DateTime         @updatedAt
+  HistorialStock HistorialStock[]
+  HistorialPrecio HistorialPrecio[]
+}
+
+model HistorialPrecio {
+  id              Int         @id @default(autoincrement())
+  productoId      Int
+  producto        Producto    @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  precioAnterior  Float
+  precioNuevo     Float
+  fechaCambio     DateTime    @default(now())
+}
+
+model Stock {
+  id              Int         @id @default(autoincrement())
+  productoId      Int
+  cantidad        Int
+  costoTotal      Float        // Costo total de adquisición de todos los productos en stock
+  creadoEn        DateTime     @default(now())
+  fechaIngreso    DateTime
+  fechaVencimiento DateTime?   // Fecha de vencimiento asociada al lote de productos
+  precioCosto     Float        // Precio al que se compró el producto en ese lote
+  producto        Producto     @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  entregaStockId  Int?         // Puede ser nulo si no está relacionado con una entrega específica
+  entregaStock    EntregaStock? @relation(fields: [entregaStockId], references: [id], onDelete: SetNull)
+}
+
+model EntregaStock {
+  id              Int         @id @default(autoincrement())
+  proveedorId     Int?        // Relación opcional con el proveedor
+  proveedor       Proveedor?  @relation(fields: [proveedorId], references: [id], onDelete: SetNull)
+  montoTotal      Float       // Monto total de la entrega (puede ser calculado sumando preciosCosto * cantidad)
+  fechaEntrega    DateTime    @default(now())
+  stockEntregado  Stock[]     // Relación con Stock
+  recibidoPorId   Int?        // Usuario que recibió la entrega (puede ser opcional)
+  usuarioRecibido Usuario?    @relation("UsuarioRecibido", fields: [recibidoPorId], references: [id], onDelete: SetNull)
+}
+
+model Cliente {
+  id              Int          @id @default(autoincrement())
+  nombre          String
+  correo          String       @unique
+  telefono        String?
+  direccion       String?
+  compras         Venta[]
+  creadoEn        DateTime     @default(now())
+  actualizadoEn   DateTime     @updatedAt
+  municipioId     Int?         // EN UBICACION TABLA
+  municipio       Municipio?   @relation(fields: [municipioId], references: [id], onDelete: SetNull) // EN UBICACION TABLA
+  departamentoId  Int?         // EN UBICACION TABLA
+  departamento    Departamento? @relation(fields: [departamentoId], references: [id], onDelete: SetNull) // EN UBICACION TABLA
+}
+
+
+
+enum MetodoPago {
+  CONTADO
+  TARJETA
+  TRANSFERENCIA
+  PAYPAL
+  OTRO
+}
+
+model Pago {
+  id              Int       @id @default(autoincrement())
+  ventaId         Int       @unique // Hacer que cada venta tenga solo un método de pago
+  venta           Venta     @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+  monto           Float     // Monto pagado
+  metodoPago      MetodoPago // Usar el enum en lugar de String
+  fechaPago       DateTime  @default(now())
+}
+
+
+model HistorialStock {
+  id              Int         @id @default(autoincrement())
+  productoId      Int
+  cantidadAnterior Int
+  cantidadNueva   Int
+  fechaCambio     DateTime    @default(now())
+  producto        Producto    @relation(fields: [productoId], references: [id], onDelete: Cascade)
+}
+model Venta {
+  id              Int         @id @default(autoincrement())
+  clienteId       Int?        // Relación opcional con un cliente//ENVIAR:OPCIONAL
+  cliente         Cliente?    @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  fechaVenta      DateTime    @default(now())
+  horaVenta       DateTime    @default(now())
+  productos       VentaProducto[]//ENVIAR
+  totalVenta      Float       // Total de la venta//ENVIAR
+  metodoPago      Pago?       // Cambia esto para permitir null
+
+}
+
+model VentaProducto {
+  id              Int         @id @default(autoincrement())
+  ventaId         Int         // Relación con la venta
+  productoId      Int         // Relación con el producto
+  cantidad        Int         // Cantidad vendida del producto
+  venta           Venta       @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+  producto        Producto    @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  creadoEn        DateTime    @default(now())  // Fecha de creación del registro
+}
+
+
+model Proveedor {
+  id              Int              @id @default(autoincrement())
+  nombre          String
+  correo          String           @unique
+  telefono        String
+  direccion       String?
+  razonSocial     String?
+  rfc             String?
+  nombreContacto  String?
+  telefonoContacto String?
+  emailContacto   String?
+  pais            String?
+  ciudad          String?
+  codigoPostal    String?
+  latitud         Float?
+  longitud        Float?
+  entregasStock   EntregaStock[]
+  activo          Boolean          @default(true)
+  notas           String?
+  creadoEn        DateTime         @default(now())
+  actualizadoEn   DateTime         @updatedAt
+}
+
+model Categoria {
+  id              Int              @id @default(autoincrement())
+  nombre          String           @unique()
+  productos       Producto[]       @relation(name: "CategoriaToProducto")
+}
+
+model Usuario {
+  id              Int              @id @default(autoincrement())
+  nombre          String
+  rol             Rol              // Rol del usuario
+  contrasena      String
+  activo          Boolean           @default(true)
+  entregasRecibidas EntregaStock[]  @relation("UsuarioRecibido")
+  correo String @unique
+}
+
+model Departamento {
+  id              Int         @id @default(autoincrement())
+  nombre          String      @unique
+  municipios      Municipio[] // Relación con municipios
+  clientes        Cliente[]   // Relación con los clientes
+}
+
+model Municipio {
+  id              Int         @id @default(autoincrement())
+  nombre          String      @unique
+  departamentoId  Int
+  departamento    Departamento @relation(fields: [departamentoId], references: [id], onDelete: Cascade)
+  clientes        Cliente[]   // Relación con los clientes
+}
+
+enum Rol {
+  ADMIN
+  VENDEDOR
+}

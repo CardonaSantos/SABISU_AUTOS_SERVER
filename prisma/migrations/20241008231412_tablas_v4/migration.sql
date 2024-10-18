@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Pago" ALTER COLUMN "ventaId" DROP NOT NULL;
