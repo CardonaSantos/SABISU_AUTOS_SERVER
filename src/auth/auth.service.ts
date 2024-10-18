@@ -63,6 +63,7 @@ export class AuthService {
       //EL PAYLOAD SE PUEDE CREAR CUANDO YA TENEMOS EL USER
       const payload = {
         nombre: nuevoUsuario.nombre,
+        correo: nuevoUsuario.correo,
         sub: nuevoUsuario.id,
         rol: nuevoUsuario.rol,
         activo: nuevoUsuario.activo,
