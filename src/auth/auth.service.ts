@@ -40,35 +40,39 @@ export class AuthService {
 
   // Registrar un nuevo usuario con contraseñas hasheadas
   async register(createAuthDto: CreateAuthDto) {
-    // Hasheamos la contraseña
-    console.log('Los datos llegando son: ', createAuthDto);
+    try {
+      // Hasheamos la contraseña
+      console.log('Los datos llegando son: ', createAuthDto);
 
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(createAuthDto.contrasena, salt);
-    const { nombre, rol, correo } = createAuthDto;
-    // Creamos el usuario
-    const nuevoUsuario = await this.userService.create({
-      nombre,
-      contrasena: hashedPassword,
-      rol,
-      correo,
-      activo: true,
-    });
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(createAuthDto.contrasena, salt);
+      const { nombre, rol, correo } = createAuthDto;
+      // Creamos el usuario
+      const nuevoUsuario = await this.userService.create({
+        nombre,
+        contrasena: hashedPassword,
+        rol,
+        correo,
+        activo: true,
+      });
 
-    //EL PAYLOAD SE PUEDE CREAR CUANDO YA TENEMOS EL USER
-    const payload = {
-      nombre: nuevoUsuario.nombre,
-      sub: nuevoUsuario.id,
-      rol: nuevoUsuario.rol,
-      activo: nuevoUsuario.activo,
-    };
+      //EL PAYLOAD SE PUEDE CREAR CUANDO YA TENEMOS EL USER
+      const payload = {
+        nombre: nuevoUsuario.nombre,
+        sub: nuevoUsuario.id,
+        rol: nuevoUsuario.rol,
+        activo: nuevoUsuario.activo,
+      };
 
-    const token = this.jwtService.sign(payload);
+      const token = this.jwtService.sign(payload);
 
-    return {
-      usuario: nuevoUsuario,
-      access_token: token,
-    };
+      return {
+        usuario: nuevoUsuario,
+        access_token: token,
+      };
+    } catch (error) {
+      console.log('EL ERROR ES: ', error);
+    }
   }
 
   //====================================>
