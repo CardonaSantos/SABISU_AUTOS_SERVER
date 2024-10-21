@@ -84,6 +84,7 @@ export class AuthService {
         sub: nuevoUsuario.id,
         rol: nuevoUsuario.rol,
         activo: nuevoUsuario.activo,
+        sucursalId: nuevoUsuario.sucursalId,
       };
 
       const token = this.jwtService.sign(payload);
