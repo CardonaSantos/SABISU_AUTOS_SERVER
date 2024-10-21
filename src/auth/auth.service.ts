@@ -7,6 +7,15 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { Rol } from '@prisma/client';
 
+interface Usuario {
+  nombre: string;
+  correo: string;
+  id: number;
+  rol: string;
+  activo: boolean;
+  sucursalId: number;
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -14,33 +23,38 @@ export class AuthService {
     private readonly jwtService: JwtService, ///DE LA DEPENDENCIA
   ) {}
 
-  async validarUsuario(correo: string, contraseña: string): Promise<any> {
+  async validarUsuario(correo: string, contrasena: string): Promise<any> {
     const usuario = await this.userService.findByGmail(correo);
     console.log('Validando usuario con correo:', correo);
     console.log('Usuario encontrado:', usuario);
 
-    if (usuario && (await bcrypt.compare(contraseña, usuario.contrasena))) {
+    if (usuario && (await bcrypt.compare(contrasena, usuario.contrasena))) {
       return usuario;
     }
+
     throw new UnauthorizedException('Usuario no autorizado');
   }
 
-  // Generar el JWT sin usar estrategias avanzadas
   async login(correo: string, contrasena: string) {
     try {
-      const usuario = await this.validarUsuario(correo, contrasena);
+      const usuario: Usuario = await this.validarUsuario(correo, contrasena);
+
       const payload = {
         nombre: usuario.nombre,
         correo: usuario.correo,
         sub: usuario.id,
         rol: usuario.rol,
         activo: usuario.activo,
+        sucursalId: usuario.sucursalId,
       };
+      console.log('El payload es: ', payload);
+
       return {
         access_token: this.jwtService.sign(payload), // Genera el token JWT
       };
     } catch (error) {
-      console.log(error);
+      console.log('Error en login:', error);
+      throw new UnauthorizedException('Credenciales incorrectas');
     }
   }
 

@@ -26,8 +26,36 @@ export class SucursalesService {
     }
   }
 
-  findAll() {
-    return `This action returns all sucursales`;
+  async findAll() {
+    try {
+      const sucursales = await this.prisma.sucursal.findMany({
+        select: {
+          nombre: true,
+          id: true,
+        },
+      });
+      if (!sucursales) {
+        throw new InternalServerErrorException('Error al encontrar sucursales');
+      }
+      return sucursales;
+    } catch (error) {
+      console.log(error);
+      throw new InternalServerErrorException('Error al encontrar sucursales');
+    }
+  }
+
+  async findOneSucursal(id: number) {
+    try {
+      const sucursal = await this.prisma.sucursal.findUnique({
+        where: {
+          id: id,
+        },
+      });
+      return sucursal;
+    } catch (error) {
+      console.log(error);
+      throw new InternalServerErrorException('Error al encontrar sucursal');
+    }
   }
 
   findOne(id: number) {

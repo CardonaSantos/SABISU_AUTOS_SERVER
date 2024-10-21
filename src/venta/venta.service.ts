@@ -12,6 +12,9 @@ export class VentaService {
   //
   constructor(private readonly prisma: PrismaService) {}
   async create(createVentaDto: CreateVentaDto) {
+    const { sucursalId, clienteId, monto, productos, metodoPago } =
+      createVentaDto;
+
     try {
       // Consolidar los productos por productoId sumando sus cantidades
       const productosConsolidados = createVentaDto.productos.reduce(
@@ -29,9 +32,7 @@ export class VentaService {
         [],
       );
 
-      console.log('Los productos consolidados son: ', productosConsolidados);
-
-      // 1. Obtener productos necesarios y verificar disponibilidad de stock
+      // 1. Obtener productos necesarios y verificar disponibilidad de stock en la sucursal
       const productos = await this.prisma.producto.findMany({
         where: {
           id: {
@@ -40,8 +41,6 @@ export class VentaService {
         },
       });
 
-      console.log('Los productos necesarios son: ', productos);
-
       const stockUpdates = [];
 
       for (const prod of productosConsolidados) {
@@ -49,9 +48,12 @@ export class VentaService {
         if (!producto)
           throw new Error(`Producto con ID ${prod.productoId} no encontrado`);
 
-        // Obtener todos los registros de stock para el producto ordenados por FIFO (fechaIngreso)
+        // Obtener los registros de stock de la sucursal correspondiente
         const stocks = await this.prisma.stock.findMany({
-          where: { productoId: producto.id },
+          where: {
+            productoId: producto.id,
+            sucursalId: sucursalId, // Filtrar por la sucursalId
+          },
           orderBy: { fechaIngreso: 'asc' }, // FIFO: los más antiguos primero
         });
 
@@ -79,16 +81,16 @@ export class VentaService {
 
         if (cantidadRestante > 0) {
           throw new InternalServerErrorException(
-            `No hay suficiente stock para el producto ${producto.nombre}`,
+            `No hay suficiente stock para el producto ${producto.nombre} en la sucursal ${sucursalId}`,
           );
         }
       }
 
-      // 2. Actualizar el stock en una sola transacción
+      // 2. Actualizar el stock en la sucursal específica en una sola transacción
       await this.prisma.$transaction(
         stockUpdates.map((stock) =>
           this.prisma.stock.update({
-            where: { id: stock.id },
+            where: { id: stock.id }, // Asegurarse de actualizar el stock correcto
             data: { cantidad: stock.cantidad },
           }),
         ),
@@ -103,14 +105,12 @@ export class VentaService {
       // 4. Crear la venta
       const venta = await this.prisma.venta.create({
         data: {
-          cliente: createVentaDto.clienteId
-            ? { connect: { id: createVentaDto.clienteId } }
-            : undefined,
+          cliente: clienteId ? { connect: { id: clienteId } } : undefined,
           horaVenta: new Date(),
           totalVenta,
           sucursal: {
             connect: {
-              id: createVentaDto.sucursalId,
+              id: sucursalId,
             },
           },
           productos: {
@@ -125,16 +125,15 @@ export class VentaService {
       // 5. Hacer el registro de pago
       const payM = await this.prisma.pago.create({
         data: {
-          metodoPago: createVentaDto.metodoPago,
+          metodoPago: metodoPago,
           monto: venta.totalVenta,
           venta: { connect: { id: venta.id } },
         },
       });
 
+      // Vincular el pago con la venta
       await this.prisma.venta.update({
-        where: {
-          id: venta.id,
-        },
+        where: { id: venta.id },
         data: {
           metodoPago: {
             connect: {
@@ -145,7 +144,6 @@ export class VentaService {
       });
 
       console.log('La venta hecha es: ', venta);
-
       return venta;
     } catch (error) {
       console.error(error);

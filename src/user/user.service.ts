@@ -13,7 +13,17 @@ export class UserService {
   async create(createUserDto: CreateUserDto) {
     try {
       const newUser = await this.prisma.usuario.create({
-        data: createUserDto,
+        data: {
+          contrasena: createUserDto.contrasena, //ya viene hasheada
+          correo: createUserDto.correo,
+          nombre: createUserDto.nombre,
+          rol: createUserDto.rol,
+          sucursal: {
+            connect: {
+              id: createUserDto.sucursalId,
+            },
+          },
+        },
       });
       return newUser;
     } catch (error) {
@@ -23,12 +33,23 @@ export class UserService {
   }
 
   async findByGmail(correo: string) {
+    console.log('Al find by email debería llegar el coreo: ', correo);
+
     try {
-      const user = await this.prisma.usuario.findUnique({
+      const user = await this.prisma.usuario.findFirst({
         where: {
           correo: correo,
         },
+        include: {
+          sucursal: {
+            select: {
+              id: true,
+            },
+          },
+        },
       });
+
+      console.log('El usuario encontrado es: ', user);
 
       if (!user) {
         throw new InternalServerErrorException('Error');

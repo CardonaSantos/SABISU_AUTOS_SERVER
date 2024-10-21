@@ -14,7 +14,8 @@ export class StockService {
 
   async create(createStockDto: StockEntryDTO) {
     try {
-      const { proveedorId, stockEntries, sucursalId } = createStockDto;
+      const { proveedorId, stockEntries, sucursalId, recibidoPorId } =
+        createStockDto;
 
       // Calcular el costo total de la entrega sumando los productos
       const costoStockEntrega = stockEntries.reduce(
@@ -25,10 +26,10 @@ export class StockService {
       // Crear el registro de EntregaStock
       const newRegistDeliveryStock = await this.prisma.entregaStock.create({
         data: {
-          proveedorId,
+          proveedorId: proveedorId,
           montoTotal: costoStockEntrega,
           // Agregamos el usuario que recibe si está disponible
-          recibidoPorId: createStockDto.recibidoPorId,
+          recibidoPorId: recibidoPorId,
         },
       });
 

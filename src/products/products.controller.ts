@@ -21,9 +21,9 @@ export class ProductsController {
     return await this.productsService.create(createProductDto);
   }
 
-  @Get()
-  async findAllProductToSale() {
-    return await this.productsService.findAllProductsToSale();
+  @Get('/sucursal/:id')
+  async findAllProductToSale(@Param('id', ParseIntPipe) id: number) {
+    return await this.productsService.findAllProductsToSale(id);
   }
   // findAllProductsToSale
   //ENCONTRAR TODAS PARA INVENTARIADO
@@ -37,17 +37,25 @@ export class ProductsController {
     return await this.productsService.findAllProductsToStcok();
   }
 
+  @Get('/product/get-one-product/:id')
+  async productToEdit(@Param('id', ParseIntPipe) id: number) {
+    return await this.productsService.productToEdit(id);
+  }
+
   @Get(':id')
   async findOne(@Param('id', ParseIntPipe) id: number) {
     return await this.productsService.findOne(id);
   }
 
-  @Patch(':id')
+  @Patch('/actualizar/producto/:id')
   async update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateProductDto: UpdateProductDto,
   ) {
-    console.log('eN EL CONTROLLER NOS LLEGA: ', updateProductDto);
+    console.log(
+      'EN EL CONTROLLER NOS LLEGA EL PRODUCTO COMPLETO A EDITAR EL CUAL ES: ',
+      updateProductDto,
+    );
 
     return await this.productsService.update(id, updateProductDto);
   }

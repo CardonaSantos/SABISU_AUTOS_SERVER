@@ -33,7 +33,7 @@ export class ProductsService {
     }
   }
 
-  async findAllProductsToSale() {
+  async findAllProductsToSale(id: number) {
     try {
       const productos = await this.prisma.producto.findMany({
         include: {
@@ -42,6 +42,7 @@ export class ProductsService {
               cantidad: {
                 gt: 0, // Solo traer productos con stock disponible
               },
+              sucursalId: id,
             },
             select: {
               id: true,
@@ -71,18 +72,15 @@ export class ProductsService {
             },
           },
           stock: {
-            where: {
-              cantidad: {
-                gt: 0, // Solo traer productos con stock disponible
-              },
-            },
-            select: {
-              id: true,
-              cantidad: true,
-              fechaIngreso: true,
-              fechaVencimiento: true,
-              entregaStock: {
+            include: {
+              sucursal: {
                 select: {
+                  id: true,
+                  nombre: true,
+                },
+              },
+              entregaStock: {
+                include: {
                   proveedor: {
                     select: {
                       nombre: true, // Solo seleccionamos el nombre del proveedor
@@ -91,10 +89,14 @@ export class ProductsService {
                 },
               },
             },
+            where: {
+              cantidad: {
+                gt: 0, // Solo traer productos con stock disponible
+              },
+            },
           },
         },
       });
-
       return productos;
     } catch (error) {
       console.error('Error en findAll productos:', error); // Proporcionar más contexto en el error
@@ -110,9 +112,29 @@ export class ProductsService {
           nombre: true,
           codigoProducto: true,
         },
+        orderBy: {
+          actualizadoEn: 'desc',
+        },
       });
 
       return productos;
+    } catch (error) {
+      console.error('Error en findAll productos:', error); // Proporcionar más contexto en el error
+      throw new InternalServerErrorException('Error al obtener los productos');
+    }
+  }
+
+  async productToEdit(id: number) {
+    try {
+      const product = await this.prisma.producto.findUnique({
+        where: {
+          id,
+        },
+        include: {
+          categorias: true,
+        },
+      });
+      return product;
     } catch (error) {
       console.error('Error en findAll productos:', error); // Proporcionar más contexto en el error
       throw new InternalServerErrorException('Error al obtener los productos');

@@ -225,6 +225,7 @@ enum Rol {
   ADMIN
   MANAGER
   VENDEDOR
+  SUPER_ADMIN
 }
 
 enum TipoSucursal {

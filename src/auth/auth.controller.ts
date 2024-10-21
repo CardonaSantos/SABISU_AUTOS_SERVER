@@ -18,12 +18,15 @@ export class AuthController {
 
   @Post('/regist-user')
   createUserWithAuth(@Body() createAuthDto: CreateAuthDto) {
+    console.log('La data llegando al regist user es: ', createAuthDto);
+
     return this.authService.register(createAuthDto);
   }
 
   @Post('/login-user')
-  loginUserWithAuth(@Body() correo: string, contrasena: string) {
-    return this.authService.login(correo, contrasena);
+  loginUserWithAuth(@Body() loginUserDto: LoginDto) {
+    console.log('La data llegando al login es: ', loginUserDto);
+    return this.authService.login(loginUserDto.correo, loginUserDto.contrasena);
   }
 
   @Post()
