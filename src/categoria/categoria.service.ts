@@ -50,13 +50,19 @@ export class CategoriaService {
 
   async update(id: number, updateCategoriaDto: UpdateCategoriaDto) {
     try {
+      console.log('La data llegando a actualizar es: ', updateCategoriaDto);
+
       const categoria = await this.prisma.categoria.update({
         where: { id },
-        data: updateCategoriaDto,
+        data: {
+          nombre: updateCategoriaDto.nombre,
+        },
       });
       if (!categoria) {
         throw new NotFoundException(`Categoria con ID ${id} no encontrada`);
       }
+      console.log('La categoria editada es: ', categoria);
+
       return categoria;
     } catch (error) {
       console.error(error);
@@ -86,6 +92,8 @@ export class CategoriaService {
       if (!categoria) {
         throw new NotFoundException(`Categoria con ID ${id} no encontrada`);
       }
+      console.log('La categoria elimnada es: ', categoria);
+
       return categoria;
     } catch (error) {
       console.error(error);

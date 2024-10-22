@@ -17,6 +17,13 @@ export class StockService {
       const { proveedorId, stockEntries, sucursalId, recibidoPorId } =
         createStockDto;
 
+      console.log('Los otros ids son: ', {
+        proveedorId,
+        stockEntries,
+        sucursalId,
+        recibidoPorId,
+      });
+
       // Calcular el costo total de la entrega sumando los productos
       const costoStockEntrega = stockEntries.reduce(
         (total, entry) => total + entry.cantidad * entry.precioCosto,
@@ -30,6 +37,7 @@ export class StockService {
           montoTotal: costoStockEntrega,
           // Agregamos el usuario que recibe si está disponible
           recibidoPorId: recibidoPorId,
+          sucursalId: sucursalId,
         },
       });
 

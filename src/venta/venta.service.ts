@@ -12,8 +12,16 @@ export class VentaService {
   //
   constructor(private readonly prisma: PrismaService) {}
   async create(createVentaDto: CreateVentaDto) {
-    const { sucursalId, clienteId, monto, productos, metodoPago } =
-      createVentaDto;
+    const {
+      sucursalId,
+      clienteId,
+      monto,
+      productos,
+      metodoPago,
+      nombreClienteFinal,
+      telefonoClienteFinal,
+      direccionClienteFinal,
+    } = createVentaDto;
 
     try {
       // Consolidar los productos por productoId sumando sus cantidades
@@ -108,6 +116,9 @@ export class VentaService {
           cliente: clienteId ? { connect: { id: clienteId } } : undefined,
           horaVenta: new Date(),
           totalVenta,
+          nombreClienteFinal: nombreClienteFinal,
+          telefonoClienteFinal: telefonoClienteFinal,
+          direccionClienteFinal: direccionClienteFinal,
           sucursal: {
             connect: {
               id: sucursalId,

@@ -31,11 +31,13 @@ export class CategoriaController {
     return await this.categoriaService.findOne(id);
   }
 
-  @Patch(':id')
+  @Patch('/edit-category/:id')
   async update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateCategoriaDto: UpdateCategoriaDto,
   ) {
+    console.log('Editando categoria');
+
     return await this.categoriaService.update(id, updateCategoriaDto);
   }
 
@@ -46,6 +48,8 @@ export class CategoriaController {
 
   @Delete(':id')
   async remove(@Param('id', ParseIntPipe) id: number) {
+    console.log('Entrando al controller del delete categoria');
+
     return await this.categoriaService.remove(id);
   }
 }

@@ -1,4 +1,8 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { CreateSucursaleDto } from './dto/create-sucursale.dto';
 import { UpdateSucursaleDto } from './dto/update-sucursale.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -60,6 +64,48 @@ export class SucursalesService {
 
   findOne(id: number) {
     return `This action returns a #${id} sucursale`;
+  }
+
+  async findAllSucursales() {
+    try {
+      const sucursales = await this.prisma.sucursal.findMany({
+        orderBy: {
+          creadoEn: 'desc',
+        },
+        include: {
+          usuarios: true,
+          _count: {
+            select: {
+              productos: true,
+            },
+          },
+        },
+      });
+      return sucursales;
+    } catch (error) {
+      console.log(error);
+      throw new InternalServerErrorException('Error');
+    }
+  }
+
+  async updateSucursal(id: number, updateSucursaleDto: UpdateSucursaleDto) {
+    try {
+      const sucursalUpdate = await this.prisma.sucursal.update({
+        where: {
+          id: id,
+        },
+        data: {
+          nombre: updateSucursaleDto.nombre,
+          direccion: updateSucursaleDto.direccion,
+          telefono: updateSucursaleDto.telefono,
+          // tipoSucursal: updateSucursaleDto.tipoSucursal,
+        },
+      });
+      return sucursalUpdate;
+    } catch (error) {
+      console.log(error);
+      throw new BadRequestException('Error');
+    }
   }
 
   update(id: number, updateSucursaleDto: UpdateSucursaleDto) {

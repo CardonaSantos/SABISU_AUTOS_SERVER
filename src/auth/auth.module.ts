@@ -19,6 +19,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
         secret: configService.get<string>('MY_SECRET_KEY'),
+        // secret: process.env.MY_SECRET_KEY || 'MySecretKey',
         signOptions: { expiresIn: '1h' },
       }),
       inject: [ConfigService],

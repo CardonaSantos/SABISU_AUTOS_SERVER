@@ -65,6 +65,37 @@ export class EntregaStockService {
     }
   }
 
+  async findAllEntregasStock(id: number) {
+    try {
+      const entregasStock = await this.prisma.entregaStock.findMany({});
+      return entregasStock;
+    } catch (error) {
+      console.error(error);
+      throw new InternalServerErrorException(
+        'Error al obtener las entregas de stock',
+      );
+    }
+  }
+
+  async findAllEntregasStockBySucursal(sucursalId: number) {
+    try {
+      const entregasStock = await this.prisma.entregaStock.findMany({
+        where: {
+          sucursalId: sucursalId,
+        },
+        include: {
+          proveedor: true, // Incluye información adicional si es necesario
+        },
+      });
+      return entregasStock;
+    } catch (error) {
+      console.error(error);
+      throw new InternalServerErrorException(
+        'Error al obtener las entregas de stock',
+      );
+    }
+  }
+
   async findOne(id: number) {
     try {
       const entregaStock = await this.prisma.entregaStock.findUnique({

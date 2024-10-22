@@ -71,6 +71,8 @@ model Sucursal {
   estadoOperacion   Boolean   @default(true) // Activa o inactiva
   Venta Venta[]
   TransferenciaProducto TransferenciaProducto[] @relation("SucursalOrigen")
+  //NUEVO
+  EntregaStock EntregaStock[]
 }
 
 model EntregaStock {
@@ -82,6 +84,9 @@ model EntregaStock {
   stockEntregado  Stock[]     // Relación con Stock
   recibidoPorId   Int?        // Usuario que recibió la entrega (puede ser opcional)
   usuarioRecibido Usuario?    @relation("UsuarioRecibido", fields: [recibidoPorId], references: [id], onDelete: SetNull)
+  //NUEVO
+  sucursalId      Int?         // NUEVO: Relación con la sucursal
+  sucursal        Sucursal?    @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
 }
 
 model Usuario {
@@ -151,6 +156,10 @@ model Venta {
   //OTROS
   sucursalId      Int         // NUEVO: Relación con la sucursal que hizo la venta
   sucursal        Sucursal    @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+  //OOTROS PARA CF
+  nombreClienteFinal String?
+  telefonoClienteFinal String?
+  direccionClienteFinal String?
 }
 
 model TransferenciaProducto {

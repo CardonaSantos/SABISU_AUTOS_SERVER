@@ -26,9 +26,14 @@ export class EntregaStockController {
     return await this.entregaStockService.findAll();
   }
 
+  @Get('/get-entregas-stock/:id')
+  async findAllEntregasStock(@Param('id', ParseIntPipe) id: number) {
+    return await this.entregaStockService.findAllEntregasStockBySucursal(id);
+  }
+
   @Get(':id')
   async findOne(@Param('id', ParseIntPipe) id: number) {
-    return await this.entregaStockService.findOne(id);
+    return await this.entregaStockService.findAllEntregasStock(id);
   }
 
   @Patch(':id')
