@@ -75,6 +75,22 @@ export class ProveedorService {
     }
   }
 
+  async findCompleteProvider() {
+    try {
+      const proveedores = await this.prisma.proveedor.findMany({
+        orderBy: {
+          actualizadoEn: 'desc',
+        },
+      });
+      return proveedores;
+    } catch (error) {
+      console.error(error);
+      throw new InternalServerErrorException(
+        'Error al obtener los proveedores',
+      );
+    }
+  }
+
   async findOne(id: number) {
     try {
       const proveedor = await this.prisma.proveedor.findUnique({
@@ -106,6 +122,39 @@ export class ProveedorService {
     //     'Error al actualizar el proveedor',
     //   );
     // }
+  }
+
+  async updateProvider(id: number, updateProveedorDto: UpdateProveedorDto) {
+    try {
+      const proveedor = await this.prisma.proveedor.update({
+        where: { id },
+        data: {
+          nombre: updateProveedorDto.nombre,
+          correo: updateProveedorDto.correo,
+          telefono: updateProveedorDto.telefono,
+          activo: updateProveedorDto.activo,
+          direccion: updateProveedorDto.direccion,
+          razonSocial: updateProveedorDto.razonSocial,
+          rfc: updateProveedorDto.rfc,
+          nombreContacto: updateProveedorDto.nombreContacto,
+          telefonoContacto: updateProveedorDto.telefonoContacto,
+          emailContacto: updateProveedorDto.emailContacto,
+          pais: updateProveedorDto.pais,
+          ciudad: updateProveedorDto.ciudad,
+          codigoPostal: updateProveedorDto.codigoPostal,
+          notas: updateProveedorDto.notas,
+        },
+      });
+      if (!proveedor) {
+        throw new NotFoundException(`Proveedor con ID ${id} no encontrado`);
+      }
+      return proveedor;
+    } catch (error) {
+      console.error(error);
+      throw new InternalServerErrorException(
+        'Error al actualizar el proveedor',
+      );
+    }
   }
 
   async removeAll() {

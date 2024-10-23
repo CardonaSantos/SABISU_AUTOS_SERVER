@@ -31,6 +31,11 @@ export class ProveedorController {
     return await this.proveedorService.findAllSimpleProveedor();
   }
 
+  @Get('/get-complete-providers')
+  async finAllCompleteProvider() {
+    return await this.proveedorService.findCompleteProvider();
+  }
+
   @Get(':id')
   async findOne(@Param('id', ParseIntPipe) id: number) {
     return await this.proveedorService.findOne(id);
@@ -42,6 +47,14 @@ export class ProveedorController {
     @Body() updateProveedorDto: UpdateProveedorDto,
   ) {
     return await this.proveedorService.update(id, updateProveedorDto);
+  }
+
+  @Patch('/edit-provider/:id')
+  async updateProvider(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateProveedorDto: UpdateProveedorDto,
+  ) {
+    return await this.proveedorService.updateProvider(id, updateProveedorDto);
   }
 
   @Delete('/delete-all')
