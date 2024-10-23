@@ -31,22 +31,14 @@ export class SucursalesController {
     return this.sucursalesService.findAllSucursales();
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.sucursalesService.findOne(+id);
-  }
-
   @Get('/get-info-sucursal/:id')
   findOneSucursal(@Param('id', ParseIntPipe) id: number) {
     return this.sucursalesService.findOneSucursal(id);
   }
 
-  @Patch(':id')
-  update(
-    @Param('id') id: string,
-    @Body() updateSucursaleDto: UpdateSucursaleDto,
-  ) {
-    return this.sucursalesService.update(+id, updateSucursaleDto);
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.sucursalesService.findOne(+id);
   }
 
   @Patch('/editar-sucursal/:id')
@@ -57,6 +49,14 @@ export class SucursalesController {
     console.log('Datos llegando al controller: ', updateSucursaleDto);
 
     return this.sucursalesService.updateSucursal(+id, updateSucursaleDto);
+  }
+
+  @Patch(':id')
+  update(
+    @Param('id') id: string,
+    @Body() updateSucursaleDto: UpdateSucursaleDto,
+  ) {
+    return this.sucursalesService.update(+id, updateSucursaleDto);
   }
 
   @Delete(':id')
