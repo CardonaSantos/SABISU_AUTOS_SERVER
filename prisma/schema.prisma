@@ -63,6 +63,7 @@ model Sucursal {
   nombre          String      // Nombre de la sucursal
   direccion       String?     // Dirección física de la sucursal
   telefono        String?     // Teléfono de contacto
+  pxb             String?
   productos       Stock[]     // Relación con el stock de productos de la sucursal
   usuarios        Usuario[]   // Relación con los empleados de la sucursal
   creadoEn        DateTime    @default(now())
