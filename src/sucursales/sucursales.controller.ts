@@ -31,6 +31,11 @@ export class SucursalesController {
     return this.sucursalesService.findAllSucursales();
   }
 
+  @Get('/sucursales-to-transfer')
+  getSucursalesToTransfer() {
+    return this.sucursalesService.findSucursalesToTransfer();
+  }
+
   @Get('/get-info-sucursal/:id')
   findOneSucursal(@Param('id', ParseIntPipe) id: number) {
     return this.sucursalesService.findOneSucursal(id);

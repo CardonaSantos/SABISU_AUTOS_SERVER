@@ -88,6 +88,24 @@ export class SucursalesService {
     }
   }
 
+  async findSucursalesToTransfer() {
+    try {
+      const sucursales = await this.prisma.sucursal.findMany({
+        orderBy: {
+          creadoEn: 'desc',
+        },
+        select: {
+          id: true,
+          nombre: true,
+        },
+      });
+      return sucursales;
+    } catch (error) {
+      console.log(error);
+      throw new InternalServerErrorException('Error');
+    }
+  }
+
   async updateSucursal(id: number, updateSucursaleDto: UpdateSucursaleDto) {
     try {
       const sucursalUpdate = await this.prisma.sucursal.update({

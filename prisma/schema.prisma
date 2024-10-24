@@ -72,6 +72,8 @@ model Sucursal {
   estadoOperacion   Boolean   @default(true) // Activa o inactiva
   Venta Venta[]
   TransferenciaProducto TransferenciaProducto[] @relation("SucursalOrigen")
+  TransferenciaProductoDestino TransferenciaProducto[] @relation("SucursalDestino") // NUEVA RELACIÓN
+
   //NUEVO
   EntregaStock EntregaStock[]
 }
@@ -170,7 +172,10 @@ model TransferenciaProducto {
   cantidad          Int         // Cantidad de producto transferido
   sucursalOrigenId  Int         // Sucursal de origen
   sucursalOrigen    Sucursal    @relation("SucursalOrigen", fields: [sucursalOrigenId], references: [id], onDelete: Cascade)
+
   sucursalDestinoId Int         // Sucursal de destino
+    sucursalDestino   Sucursal    @relation("SucursalDestino", fields: [sucursalDestinoId], references: [id], onDelete: Cascade)  // NUEVA RELACIÓN
+
   fechaTransferencia DateTime   @default(now())
 
   usuarioEncargadoId Int?        // Relación con el usuario que hace la transferencia

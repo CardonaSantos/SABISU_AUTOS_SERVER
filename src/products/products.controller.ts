@@ -32,6 +32,11 @@ export class ProductsController {
     return await this.productsService.findAll();
   }
 
+  @Get('/products/to-transfer/:id')
+  async findAllProductsToTransfer(@Param('id', ParseIntPipe) id: number) {
+    return await this.productsService.findAllProductsToTransfer(id);
+  }
+
   @Get('/products/for-set-stock')
   async findAllProductsToStcok() {
     return await this.productsService.findAllProductsToStcok();

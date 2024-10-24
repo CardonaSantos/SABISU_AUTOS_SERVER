@@ -104,6 +104,27 @@ export class ProductsService {
     }
   }
 
+  async findAllProductsToTransfer(id: number) {
+    try {
+      const productos = await this.prisma.producto.findMany({
+        include: {
+          stock: {
+            where: {
+              cantidad: {
+                gt: 0, // Solo traer productos con stock disponible
+              },
+              sucursalId: id,
+            },
+          },
+        },
+      });
+      return productos;
+    } catch (error) {
+      console.error('Error en findAll productos:', error); // Proporcionar más contexto en el error
+      throw new InternalServerErrorException('Error al obtener los productos');
+    }
+  }
+
   async findAllProductsToStcok() {
     try {
       const productos = await this.prisma.producto.findMany({
