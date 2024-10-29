@@ -26,6 +26,11 @@ export class UserController {
     return await this.userService.findAll();
   }
 
+  @Get('/usuario-con-notificacion')
+  async findAllUserWithNot() {
+    return await this.userService.findAllUserWithNot();
+  }
+
   @Get(':id')
   async findOne(@Param('id', ParseIntPipe) id: number) {
     return await this.userService.findOne(+id);

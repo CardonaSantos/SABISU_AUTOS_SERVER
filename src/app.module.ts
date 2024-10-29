@@ -15,6 +15,10 @@ import { AuthModule } from './auth/auth.module';
 import { ConfigModule } from '@nestjs/config';
 import { SucursalesModule } from './sucursales/sucursales.module';
 import { TransferenciaProductoModule } from './transferencia-producto/transferencia-producto.module';
+import { GatewayModule } from './web-sockets/websocket.module';
+import { NotificationModule } from './notification/notification.module';
+import { PriceRequestModule } from './price-request/price-request.module';
+import { SolicitudTransferenciaProductoModule } from './solicitud-transferencia-producto/solicitud-transferencia-producto.module';
 
 @Module({
   imports: [
@@ -34,6 +38,11 @@ import { TransferenciaProductoModule } from './transferencia-producto/transferen
     }),
     SucursalesModule,
     TransferenciaProductoModule,
+    //SOCKETSSSSSS
+    GatewayModule,
+    NotificationModule,
+    PriceRequestModule,
+    SolicitudTransferenciaProductoModule,
   ],
   controllers: [AppController],
   providers: [AppService],

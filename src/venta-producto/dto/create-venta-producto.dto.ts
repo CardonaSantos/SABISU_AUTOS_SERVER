@@ -13,4 +13,7 @@ export class CreateVentaProductoDto {
 
   @IsDate()
   creadoEn: Date;
+
+  @IsInt()
+  selectedPrice?: number;
 }

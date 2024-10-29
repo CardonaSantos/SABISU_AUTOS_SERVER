@@ -2,10 +2,14 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { CreateTransferenciaProductoDto } from './dto/create-transferencia-producto.dto';
 import { UpdateTransferenciaProductoDto } from './dto/update-transferencia-producto.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { NotificationService } from 'src/notification/notification.service';
 
 @Injectable()
 export class TransferenciaProductoService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationService: NotificationService,
+  ) {}
 
   create(createTransferenciaProductoDto: CreateTransferenciaProductoDto) {
     return 'This action adds a new transferenciaProducto';
@@ -38,7 +42,7 @@ export class TransferenciaProductoService {
 
     let cantidadRestante = cantidad;
 
-    // Actualizar el stock de la sucursal de origen utilizando FIFO
+    // FIFO
     for (const stock of stockOrigenes) {
       if (cantidadRestante === 0) break;
 
@@ -117,6 +121,7 @@ export class TransferenciaProductoService {
           producto: true,
           usuarioEncargado: true,
           sucursalDestino: true,
+          sucursalOrigen: true,
         },
       });
 

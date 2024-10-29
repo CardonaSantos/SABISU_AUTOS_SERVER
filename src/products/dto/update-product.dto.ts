@@ -1,6 +1,20 @@
 import { PartialType } from '@nestjs/mapped-types';
 import { CreateProductDto } from './create-product.dto';
-import { IsArray, IsNumber, IsOptional, IsString } from 'class-validator';
+import {
+  IsArray,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+} from 'class-validator';
+
+class PriceDto {
+  @IsInt()
+  id: number;
+
+  @IsNumber()
+  precio: number;
+}
 
 export class UpdateProductDto {
   @IsOptional()
@@ -22,4 +36,11 @@ export class UpdateProductDto {
   @IsArray()
   @IsOptional()
   categorias?: number[]; // IDs de categorías asociadas (opcional)
+
+  @IsArray()
+  @IsOptional()
+  precios: PriceDto[]; // Arreglo de objetos precio
+
+  @IsInt()
+  usuarioId: number;
 }

@@ -14,11 +14,51 @@ datasource db {
 }
 
 
+model Notificacion {
+  id                Int                @id @default(autoincrement())
+  mensaje           String             // Mensaje de la notificación
+  remitenteId       Int?               // Usuario que envía la notificación (opcional)
+  remitente         Usuario?           @relation("Remitente", fields: [remitenteId], references: [id])
+  tipoNotificacion  TipoNotificacion   // Tipo de notificación (enum)
+  referenciaId      Int?               // ID de referencia relacionado (por ejemplo, ID de solicitud o transferencia)
+  fechaCreacion     DateTime           @default(now()) // Fecha de creación de la notificación
+  notificacionesUsuarios NotificacionesUsuarios[]  // Relación con tabla intermedia
+
+  Usuario Usuario[] @relation("Destinatario")
+}
+
+
+model NotificacionesUsuarios {
+  id                Int                @id @default(autoincrement())
+  usuarioId         Int                // Usuario que recibe la notificación
+  usuario           Usuario            @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  notificacionId    Int                // ID de la notificación
+  notificacion      Notificacion       @relation(fields: [notificacionId], references: [id], onDelete: Cascade)
+  leido             Boolean            @default(false)  // Indica si la notificación fue leída
+  eliminado         Boolean            @default(false)  // Indica si la notificación fue eliminada
+  leidoEn           DateTime?                          // Fecha en que se leyó
+  recibidoEn        DateTime           @default(now())  // Fecha en que se recibió la notificación
+}
+
+
+model SolicitudPrecio {
+  id                Int         @id @default(autoincrement())
+  productoId        Int
+  producto          Producto    @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  precioSolicitado  Float       // Precio solicitado por el vendedor
+  solicitadoPorId   Int         // Relación con el usuario que solicita el precio
+  solicitadoPor     Usuario     @relation("SolicitadoPor", fields: [solicitadoPorId], references: [id])
+  estado            EstadoSolicitud  @default(PENDIENTE)  // Estado de la solicitud
+  aprobadoPorId     Int?        // Admin que aprueba o rechaza la solicitud (nullable)
+  aprobadoPor       Usuario?    @relation("AprobadoPor", fields: [aprobadoPorId], references: [id])
+  fechaSolicitud    DateTime    @default(now())
+  fechaRespuesta    DateTime?   // Fecha cuando fue aprobada o rechazada
+}
+
 model Producto {
   id                Int              @id @default(autoincrement())
   nombre            String
   descripcion       String?
-  precioVenta       Float            // Precio al que se vende el producto
   stock             Stock[]          // Relación con Stock
   categorias        Categoria[]      @relation(name: "CategoriaToProducto")
   ventas            VentaProducto[]  // Relación con productos vendidos en varias ventas
@@ -27,8 +67,28 @@ model Producto {
   actualizadoEn     DateTime         @updatedAt
   HistorialStock HistorialStock[]
   HistorialPrecio HistorialPrecio[]
-
   TransferenciaProducto TransferenciaProducto[]
+  //NUEVOS PRECIOS
+  precios           PrecioProducto[] // Relación con múltiples precios
+  SolicitudPrecio SolicitudPrecio[]
+
+  //NUEVA SOLICITUD TRANSFERENCIA
+    solicitudesTransferencia SolicitudTransferenciaProducto[]
+
+}
+
+model PrecioProducto {
+  id                Int        @id @default(autoincrement())
+  productoId        Int?
+  producto          Producto?   @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  precio            Float      // El precio de venta
+  creadoPorId       Int?        // El usuario que creó el precio (puede ser un vendedor)
+  creadoPor         Usuario?   @relation(fields: [creadoPorId], references: [id])
+  fechaCreacion     DateTime   @default(now())
+  // estado            EstadoPrecio  // Estado del precio: puede estar "APROBADO" o "PENDIENTE"
+  estado            EstadoPrecio  // Estado del precio: APROBADO, PENDIENTE, RECHAZADO
+  usado             Boolean     @default(false) // Para marcar si el precio ha sido utilizado
+  tipo              TipoPrecio // Puede ser 'CREADO_POR_SOLICITUD', 'ESTANDAR', etc.
 }
 
 model HistorialPrecio {
@@ -76,6 +136,10 @@ model Sucursal {
 
   //NUEVO
   EntregaStock EntregaStock[]
+  //NUEVO SOLICITUD TRANSFERENCIA
+  // Relaciones para solicitudes de transferencia
+  solicitudesOrigen    SolicitudTransferenciaProducto[] @relation("SucursalOrigenSolicitud")
+  solicitudesDestino   SolicitudTransferenciaProducto[] @relation("SucursalDestinoSolicitud")
 }
 
 model EntregaStock {
@@ -93,17 +157,30 @@ model EntregaStock {
 }
 
 model Usuario {
-  id              Int              @id @default(autoincrement())
-  nombre          String
-  rol             Rol              // Rol del usuario
-  contrasena      String
-  activo          Boolean           @default(true)
-  entregasRecibidas EntregaStock[]  @relation("UsuarioRecibido")
-  correo String @unique
-  //OTROS
-  sucursalId      Int              // NUEVO: Relación con la sucursal
-  sucursal        Sucursal         @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+  id                    Int                @id @default(autoincrement())
+  nombre                String
+  rol                   Rol                // Rol del usuario
+  contrasena            String
+  activo                Boolean            @default(true)
+  entregasRecibidas     EntregaStock[]     @relation("UsuarioRecibido")
+  correo                String             @unique
+  sucursalId            Int                // Relación con la sucursal
+  sucursal              Sucursal           @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
   TransferenciaProducto TransferenciaProducto[]
+  PrecioProducto        PrecioProducto[]
+  solicitudesPrecio     SolicitudPrecio[]  @relation("SolicitadoPor")
+  solicitudesAprobadas  SolicitudPrecio[]  @relation("AprobadoPor")
+
+  notificacionesEnviadas  Notificacion[] @relation("Remitente")
+  notificacionesRecibidas Notificacion[] @relation("Destinatario")
+
+  notificacionesUsuarios  NotificacionesUsuarios[]  // Relación con tabla intermedia
+//NUEVAS PARA SOLICITAR TRANSFERENCIA
+// Relaciones para las solicitudes de transferencia de productos
+  // Relaciones para las solicitudes de transferencia de productos
+  solicitudesEnviadas      SolicitudTransferenciaProducto[] @relation("UsuarioSolicitante")
+  solicitudesAprobadasTransferencia SolicitudTransferenciaProducto[] @relation("AdministradorAprobador") // Renombrada para especificidad
+
 }
 
 model Cliente {
@@ -121,13 +198,6 @@ model Cliente {
   departamento    Departamento? @relation(fields: [departamentoId], references: [id], onDelete: SetNull) // EN UBICACION TABLA
 }
 
-enum MetodoPago {
-  CONTADO
-  TARJETA
-  TRANSFERENCIA
-  PAYPAL
-  OTRO
-}
 
 model Pago {
   id              Int       @id @default(autoincrement())
@@ -172,16 +242,33 @@ model TransferenciaProducto {
   cantidad          Int         // Cantidad de producto transferido
   sucursalOrigenId  Int         // Sucursal de origen
   sucursalOrigen    Sucursal    @relation("SucursalOrigen", fields: [sucursalOrigenId], references: [id], onDelete: Cascade)
-
   sucursalDestinoId Int         // Sucursal de destino
-    sucursalDestino   Sucursal    @relation("SucursalDestino", fields: [sucursalDestinoId], references: [id], onDelete: Cascade)  // NUEVA RELACIÓN
-
+  sucursalDestino   Sucursal    @relation("SucursalDestino", fields: [sucursalDestinoId], references: [id], onDelete: Cascade)  // NUEVA RELACIÓN
   fechaTransferencia DateTime   @default(now())
-
   usuarioEncargadoId Int?        // Relación con el usuario que hace la transferencia
   usuarioEncargado   Usuario?    @relation(fields: [usuarioEncargadoId], references: [id], onDelete: SetNull)
 }
   
+  model SolicitudTransferenciaProducto {
+  id                    Int          @id @default(autoincrement())
+  productoId            Int          // ID del producto que se quiere transferir
+  producto              Producto     @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  cantidad              Int          // Cantidad solicitada
+  sucursalOrigenId      Int          // Sucursal de origen de la solicitud
+  sucursalOrigen        Sucursal     @relation("SucursalOrigenSolicitud", fields: [sucursalOrigenId], references: [id], onDelete: Cascade)
+  sucursalDestinoId     Int          // Sucursal de destino de la solicitud
+  sucursalDestino       Sucursal     @relation("SucursalDestinoSolicitud", fields: [sucursalDestinoId], references: [id], onDelete: Cascade)
+  usuarioSolicitanteId  Int?          // Usuario que realiza la solicitud
+  usuarioSolicitante    Usuario?      @relation("UsuarioSolicitante", fields: [usuarioSolicitanteId], references: [id], onDelete: SetNull)
+  estado                EstadoSolicitudTransferencia @default(PENDIENTE) // Estado de la solicitud
+  fechaSolicitud        DateTime     @default(now())                    // Fecha de la solicitud
+  fechaAprobacion       DateTime?                                        // Fecha de aprobación o rechazo
+  administradorId       Int?         // Admin que aprueba/rechaza la solicitud
+  administrador         Usuario?     @relation("AdministradorAprobador", fields: [administradorId], references: [id], onDelete: SetNull)
+  // motivoRechazo         String?                                          // Motivo de rechazo, si es rechazado
+}
+
+
 model VentaProducto {
   id              Int         @id @default(autoincrement())
   ventaId         Int         // Relación con la venta
@@ -190,6 +277,8 @@ model VentaProducto {
   venta           Venta       @relation(fields: [ventaId], references: [id], onDelete: Cascade)
   producto        Producto    @relation(fields: [productoId], references: [id], onDelete: Cascade)
   creadoEn        DateTime    @default(now())  // Fecha de creación del registro
+  //NUEVA PROPIEDAD QUE REGISTRA EL PRECIO AL QUE SE VENDIÓ EL PRODUCTO, SUSTITUTO DE DE PRECIOvENTA EN TABLA PRODUCTO
+  precioVenta     Float       // Precio de venta del producto en el momento de la venta
 }
 
 model Proveedor {
@@ -250,3 +339,48 @@ enum TipoSucursal {
   TALLER
   OFICINA
 }
+
+enum MetodoPago {
+  CONTADO
+  TARJETA
+  TRANSFERENCIA
+  PAYPAL
+  OTRO
+}
+
+enum TipoPrecio {
+  CREADO_POR_SOLICITUD
+  ESTANDAR
+}
+
+enum EstadoPrecio {
+  APROBADO
+  PENDIENTE
+  RECHAZADO
+}
+
+enum TipoNotificacion {
+  SOLICITUD_PRECIO
+  TRANSFERENCIA
+  VENCIMIENTO
+  OTRO
+}
+
+enum EstadoNotificacion {
+  NO_LEIDO
+  LEIDO
+}
+
+enum EstadoSolicitud {
+  PENDIENTE
+  APROBADO
+  RECHAZADO
+}
+
+// Enum para el estado de las solicitudes de transferencia
+enum EstadoSolicitudTransferencia {
+  PENDIENTE
+  APROBADO
+  RECHAZADO
+}
+  

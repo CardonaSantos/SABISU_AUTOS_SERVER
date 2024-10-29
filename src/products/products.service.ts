@@ -6,30 +6,62 @@ import {
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { CreateNewProductDto } from './dto/create-productNew.dto';
 
 @Injectable()
 export class ProductsService {
   constructor(private readonly prisma: PrismaService) {}
-  async create(createProductDto: CreateProductDto) {
+  async create(createProductDto: CreateNewProductDto) {
     try {
-      const newProduct = await this.prisma.producto.create({
-        data: {
-          codigoProducto: createProductDto.codigoProducto,
-          nombre: createProductDto.nombre,
-          precioVenta: createProductDto.precioVenta,
-          descripcion: createProductDto.descripcion,
-          categorias: {
-            //conectar por medio del id de la categoria del array enviado
-            connect: createProductDto.categorias?.map((categoriaId) => ({
-              id: categoriaId,
-            })),
+      const result = await this.prisma.$transaction(async (prisma) => {
+        // Crear el producto
+        const newProduct = await prisma.producto.create({
+          data: {
+            codigoProducto: createProductDto.codigoProducto,
+            nombre: createProductDto.nombre,
+            descripcion: createProductDto.descripcion,
+            categorias: {
+              connect: createProductDto.categorias?.map((categoriaId) => ({
+                id: categoriaId,
+              })),
+            },
           },
-        },
+        });
+
+        // Crear precios de venta asociados al producto
+        const preciosCreados = await Promise.all(
+          createProductDto.precioVenta.map((precio) =>
+            prisma.precioProducto.create({
+              data: {
+                producto: {
+                  connect: { id: newProduct.id }, // Relacionar con el producto recién creado
+                },
+
+                precio: precio,
+                estado: 'APROBADO', // Se puede manejar el estado según lo requerido
+                tipo: 'ESTANDAR',
+                // creadoPorId: createProductDto.creadoPorId, // El vendedor o usuario que lo creó (si es aplicable)
+                creadoPor: {
+                  connect: {
+                    id: createProductDto.creadoPorId,
+                  },
+                },
+                fechaCreacion: new Date(),
+              },
+            }),
+          ),
+        );
+        console.log('el nuevo producto es: ', newProduct);
+
+        return { newProduct, preciosCreados };
       });
-      return newProduct;
+
+      return result; // Devuelve el producto y sus precios creados
     } catch (error) {
-      console.log(error);
-      throw new InternalServerErrorException('Error al crear la categoria');
+      console.error(error);
+      throw new InternalServerErrorException(
+        'Error al crear el producto con precios',
+      );
     }
   }
 
@@ -37,6 +69,12 @@ export class ProductsService {
     try {
       const productos = await this.prisma.producto.findMany({
         include: {
+          precios: {
+            select: {
+              id: true,
+              precio: true,
+            },
+          },
           stock: {
             where: {
               cantidad: {
@@ -65,6 +103,14 @@ export class ProductsService {
     try {
       const productos = await this.prisma.producto.findMany({
         include: {
+          precios: {
+            select: {
+              id: true,
+              precio: true,
+              tipo: true,
+              usado: true,
+            },
+          },
           categorias: {
             select: {
               id: true,
@@ -153,6 +199,12 @@ export class ProductsService {
         },
         include: {
           categorias: true,
+          precios: {
+            select: {
+              id: true,
+              precio: true,
+            },
+          },
         },
       });
       return product;
@@ -188,22 +240,42 @@ export class ProductsService {
         data: {
           codigoProducto: updateProductDto.codigoProducto,
           nombre: updateProductDto.nombre,
-          precioVenta: updateProductDto.precioVenta,
           descripcion: updateProductDto.descripcion,
           categorias: {
-            set: [], // Eliminar todas las relaciones previas
+            set: [],
             connect: updateProductDto.categorias?.map((categoriaId) => ({
               id: categoriaId,
             })),
           },
         },
         include: {
-          categorias: true, // Asegurarte de que se incluyan las categorías en la respuesta
+          categorias: true,
         },
       });
 
-      console.log('El producto editado es: ', productoUpdate);
+      // Aquí vamos a manejar los precios
+      for (const price of updateProductDto.precios) {
+        if (price.id) {
+          // Actualizar precio existente
+          await this.prisma.precioProducto.update({
+            where: { id: price.id },
+            data: { precio: price.precio },
+          });
+        } else {
+          // Crear nuevo precio (si es necesario, aunque en este caso no parece que se deba añadir)
+          await this.prisma.precioProducto.create({
+            data: {
+              estado: 'APROBADO',
+              precio: price.precio,
+              creadoPorId: updateProductDto.usuarioId,
+              productoId: productoUpdate.id,
+              tipo: 'ESTANDAR',
+            },
+          });
+        }
+      }
 
+      console.log('El producto editado es: ', productoUpdate);
       return productoUpdate;
     } catch (error) {
       console.log(error);

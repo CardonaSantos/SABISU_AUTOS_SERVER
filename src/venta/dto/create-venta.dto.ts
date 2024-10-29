@@ -14,7 +14,12 @@ export class CreateVentaDto {
   clienteId?: number;
 
   @IsArray()
-  productos: Array<{ productoId: number; cantidad: number }>;
+  productos: Array<{
+    productoId: number;
+    cantidad: number;
+    precioProductoId: number; // Agregar el ID del precio del producto
+    selectedPriceId: number;
+  }>;
 
   @IsEnum(MetodoPago)
   metodoPago: MetodoPago;
@@ -25,7 +30,6 @@ export class CreateVentaDto {
   @IsInt()
   sucursalId: number;
 
-  //NUEVOS CAMPOS
   @IsString()
   @IsOptional()
   nombreClienteFinal: string;

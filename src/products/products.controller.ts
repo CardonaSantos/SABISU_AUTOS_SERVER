@@ -11,13 +11,16 @@ import {
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { CreateNewProductDto } from './dto/create-productNew.dto';
 
 @Controller('products')
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
   //CREAR
   @Post()
-  async create(@Body() createProductDto: CreateProductDto) {
+  async create(@Body() createProductDto: CreateNewProductDto) {
+    console.log('La data llegando al controller es: ', createProductDto);
+
     return await this.productsService.create(createProductDto);
   }
 

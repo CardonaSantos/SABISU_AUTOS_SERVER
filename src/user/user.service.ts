@@ -73,6 +73,36 @@ export class UserService {
     }
   }
 
+  //Encontrar usuarios simples
+  // Encontrar usuarios simples con notificaciones
+  async findAllUserWithNot() {
+    try {
+      const users = await this.prisma.usuario.findMany({
+        include: {
+          // notificacionesEnviadas: true,
+          // notificacionesRecibidas: {
+          //   include: {
+          //     notificacionesUsuarios: true, // Incluye los detalles de la notificación
+          //   },
+          // },
+          // entregasRecibidas: true,
+          notificacionesUsuarios: {
+            include: {
+              notificacion: true, // Incluye los detalles de la notificación en la tabla intermedia
+            },
+          },
+          // solicitudesAprobadas: true,
+          // solicitudesPrecio: true,
+          // TransferenciaProducto: true,
+        },
+      });
+      return users;
+    } catch (error) {
+      console.log(error);
+      throw new InternalServerErrorException('Error al encontrar usuarios');
+    }
+  }
+
   //ENCONTRAR SIMPLE USER
   async findOne(id: number) {
     try {

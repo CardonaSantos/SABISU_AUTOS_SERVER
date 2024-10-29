@@ -13,7 +13,12 @@ export class VentaProductoService {
   async create(createVentaProductoDto: CreateVentaProductoDto) {
     try {
       const ventaProducto = await this.prisma.ventaProducto.create({
-        data: createVentaProductoDto,
+        data: {
+          cantidad: createVentaProductoDto.cantidad,
+          precioVenta: createVentaProductoDto.selectedPrice,
+          ventaId: createVentaProductoDto.ventaId,
+          productoId: createVentaProductoDto.productoId,
+        },
       });
       return ventaProducto;
     } catch (error) {
