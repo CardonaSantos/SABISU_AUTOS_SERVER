@@ -13,6 +13,24 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Vencimiento {
+  id                     Int          @id @default(autoincrement())
+  fechaVencimiento      DateTime     // Fecha de vencimiento
+  estado                 EstadoVencimiento @default(PENDIENTE) // Estado del vencimiento (pendiente, notificado, etc.)
+  descripcion            String?      // Descripción del vencimiento (opcional)
+  
+  // Relación con Stock
+  stockId               Int?         // Relación opcional con Stock
+  stock                 Stock?       @relation(fields: [stockId], references: [id], onDelete: SetNull)
+
+  // No es necesario incluir notificaciones aquí
+}
+enum EstadoVencimiento {
+  PENDIENTE
+  NOTIFICADO
+  RESUELTO
+}
+
 
 model Notificacion {
   id                Int                @id @default(autoincrement())
@@ -116,6 +134,8 @@ model Stock {
   sucursal        Sucursal     @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
   sucursalId      Int          // NUEVO: Relación con la sucursal
 
+
+  Vencimiento Vencimiento[]
 }
 
 model Sucursal {
