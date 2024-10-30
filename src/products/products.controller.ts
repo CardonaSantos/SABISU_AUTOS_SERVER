@@ -50,6 +50,11 @@ export class ProductsController {
     return await this.productsService.productToEdit(id);
   }
 
+  @Get('/historial-price')
+  async productHistorialPrecios() {
+    return await this.productsService.productHistorialPrecios();
+  }
+
   @Get(':id')
   async findOne(@Param('id', ParseIntPipe) id: number) {
     return await this.productsService.findOne(id);

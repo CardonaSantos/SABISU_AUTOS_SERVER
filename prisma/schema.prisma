@@ -89,11 +89,26 @@ model Producto {
   //NUEVOS PRECIOS
   precios           PrecioProducto[] // Relación con múltiples precios
   SolicitudPrecio SolicitudPrecio[]
-
   //NUEVA SOLICITUD TRANSFERENCIA
-    solicitudesTransferencia SolicitudTransferenciaProducto[]
-
+  solicitudesTransferencia SolicitudTransferenciaProducto[]
+  //NUEVO PRECIO COSTO PRODUCTO
+  precioCostoActual Float?
+  // Historial de precios de costo
+  HistorialPrecioCosto HistorialPrecioCosto[]
 }
+
+model HistorialPrecioCosto {
+  id                Int       @id @default(autoincrement())
+  productoId        Int
+  producto          Producto   @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  precioCostoAnterior Float
+  precioCostoNuevo    Float
+  fechaCambio       DateTime  @default(now())
+  //========================================>
+  modificadoPorId     Int?
+  modificadoPor       Usuario?   @relation(fields: [modificadoPorId], references: [id], onDelete: Cascade) // Relación con Usuario
+}
+
 
 model PrecioProducto {
   id                Int        @id @default(autoincrement())
@@ -201,6 +216,8 @@ model Usuario {
   solicitudesEnviadas      SolicitudTransferenciaProducto[] @relation("UsuarioSolicitante")
   solicitudesAprobadasTransferencia SolicitudTransferenciaProducto[] @relation("AdministradorAprobador") // Renombrada para especificidad
 
+  //RECIOS QUE EL WN MODIFICÓ
+  HistorialPrecioCosto HistorialPrecioCosto[]
 }
 
 model Cliente {

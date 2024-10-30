@@ -17,6 +17,7 @@ export class ProductsService {
         // Crear el producto
         const newProduct = await prisma.producto.create({
           data: {
+            precioCostoActual: createProductDto.precioCostoActual,
             codigoProducto: createProductDto.codigoProducto,
             nombre: createProductDto.nombre,
             descripcion: createProductDto.descripcion,
@@ -214,6 +215,38 @@ export class ProductsService {
     }
   }
 
+  async productHistorialPrecios() {
+    try {
+      const historialPrecios = await this.prisma.historialPrecioCosto.findMany({
+        include: {
+          modificadoPor: {
+            select: {
+              nombre: true,
+              id: true,
+              rol: true,
+              sucursal: {
+                // Debes hacer include aquí
+                select: {
+                  nombre: true,
+                  id: true,
+                  direccion: true,
+                },
+              },
+            },
+          },
+          producto: true, // Suponiendo que deseas incluir todo el producto
+        },
+        orderBy: {
+          fechaCambio: 'desc',
+        },
+      });
+      return historialPrecios;
+    } catch (error) {
+      console.log(error);
+      throw new InternalServerErrorException('Error');
+    }
+  }
+
   async findOne(id: number) {
     try {
       const producto = await this.prisma.producto.findUnique({
@@ -233,6 +266,11 @@ export class ProductsService {
       ' LOS OTROS DATOS: ',
       updateProductDto,
     );
+    const productoAnterior = await this.prisma.producto.findUnique({
+      where: {
+        id: id,
+      },
+    });
 
     try {
       const productoUpdate = await this.prisma.producto.update({
@@ -241,6 +279,7 @@ export class ProductsService {
           codigoProducto: updateProductDto.codigoProducto,
           nombre: updateProductDto.nombre,
           descripcion: updateProductDto.descripcion,
+          precioCostoActual: Number(updateProductDto.precioCostoActual),
           categorias: {
             set: [],
             connect: updateProductDto.categorias?.map((categoriaId) => ({
@@ -272,6 +311,38 @@ export class ProductsService {
               tipo: 'ESTANDAR',
             },
           });
+        }
+      }
+
+      if (productoAnterior && productoUpdate) {
+        console.log(
+          'Precio anterior:',
+          productoAnterior.precioCostoActual,
+          'Precio nuevo:',
+          productoUpdate.precioCostoActual,
+        );
+
+        if (
+          //
+          Number(productoAnterior.precioCostoActual) !==
+          Number(productoUpdate.precioCostoActual)
+        ) {
+          console.log('El precio ha cambiado, actualizando');
+
+          const nuevoRegistroPrecioCosto =
+            await this.prisma.historialPrecioCosto.create({
+              data: {
+                productoId: productoAnterior.id,
+                precioCostoAnterior: Number(productoAnterior.precioCostoActual),
+                precioCostoNuevo: Number(productoUpdate.precioCostoActual),
+                modificadoPorId: updateProductDto.usuarioId,
+              },
+            });
+
+          console.log(
+            'El nuevo registro de cambio de precio es: ',
+            nuevoRegistroPrecioCosto,
+          );
         }
       }
 

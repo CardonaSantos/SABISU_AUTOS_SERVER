@@ -14,8 +14,10 @@ export class CreateNewProductDto {
   precioVenta: number[]; // Precio de venta del producto
   @IsNumber()
   creadoPorId: number;
-
   @IsArray()
   @IsOptional()
   categorias?: number[]; // IDs de categorías asociadas (opcional)
+
+  @IsNumber()
+  precioCostoActual: number;
 }

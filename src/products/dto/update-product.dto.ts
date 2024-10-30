@@ -21,6 +21,9 @@ export class UpdateProductDto {
   @IsString()
   nombre: string; // Nombre del producto
 
+  @IsNumber()
+  precioCostoActual: number;
+
   @IsString()
   @IsOptional()
   codigoProducto: string; // Código único del producto
