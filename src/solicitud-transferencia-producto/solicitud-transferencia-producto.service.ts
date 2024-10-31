@@ -43,8 +43,32 @@ export class SolicitudTransferenciaProductoService {
         where: { rol: 'ADMIN' },
       });
 
-      const mensaje = `Nueva solicitud de transferencia creada por usuario ${createSolicitudTransferenciaProductoDto.usuarioSolicitanteId}`;
-      const tipoNotificacion = 'SOLICITUD_TRANSFERENCIA';
+      const user = await this.prisma.usuario.findUnique({
+        where: {
+          id: createSolicitudTransferenciaProductoDto.usuarioSolicitanteId,
+        },
+      });
+      const product = await this.prisma.producto.findUnique({
+        where: {
+          id: createSolicitudTransferenciaProductoDto.productoId,
+        },
+      });
+
+      const sucursalOrigen = await this.prisma.sucursal.findUnique({
+        where: {
+          id: createSolicitudTransferenciaProductoDto.sucursalOrigenId,
+        },
+      });
+
+      const sucursalDestino = await this.prisma.sucursal.findUnique({
+        where: {
+          id: createSolicitudTransferenciaProductoDto.sucursalDestinoId,
+        },
+      });
+
+      // const mensaje = `El usuario ${user.nombre} ha solicitdado una transferncia para el producto ${product.nombre} de la sucursal ${sucursalOrigen.nombre} a ${sucursalDestino.nombre}`;
+      // const mensaje = `El usuario ${user.nombre} ha solicitado una transferencia del producto "${product.nombre}" desde la sucursal "${sucursalOrigen.nombre}" hacia la sucursal "${sucursalDestino.nombre} de ${createSolicitudTransferenciaProductoDto.cantidad} unidades".`;
+      const mensaje = `El usuario ${user.nombre} ha solicitado una transferencia del producto "${product.nombre}" desde la sucursal "${sucursalOrigen.nombre}" hacia la sucursal "${sucursalDestino.nombre}" de un total de ${createSolicitudTransferenciaProductoDto.cantidad} unidades.`;
 
       const solicitudTranferenciaDetalles =
         await this.prisma.solicitudTransferenciaProducto.findUnique({
@@ -105,12 +129,56 @@ export class SolicitudTransferenciaProductoService {
     }
   }
 
+  // async createTransferencia(idSolicitudTransferencia: number, userID: number) {
+  //   try {
+  //     // Encontrar la solicitud de transferencia
+  //     const solicitudTransferencia =
+  //       await this.prisma.solicitudTransferenciaProducto.findUnique({
+  //         where: { id: idSolicitudTransferencia },
+  //       });
+
+  //     if (!solicitudTransferencia) {
+  //       throw new Error('Solicitud de transferencia no encontrada');
+  //     }
+
+  //     // Extraer datos necesarios para la transferencia
+  //     const dto: CreateTransferenciaProductoDto = {
+  //       productoId: solicitudTransferencia.productoId,
+  //       cantidad: solicitudTransferencia.cantidad,
+  //       sucursalOrigenId: solicitudTransferencia.sucursalOrigenId,
+  //       sucursalDestinoId: solicitudTransferencia.sucursalDestinoId,
+  //       usuarioEncargadoId: userID,
+  //     };
+
+  //     // Ejecutar la transferencia
+  //     const transferencia = await this.transferirProducto(dto);
+
+  //     // Eliminar la solicitud de transferencia después de completar la transferencia
+  //     await this.prisma.solicitudTransferenciaProducto.delete({
+  //       where: { id: idSolicitudTransferencia },
+  //     });
+
+  //     return {
+  //       message: 'Transferencia realizada y solicitud eliminada con éxito',
+  //       transferencia,
+  //     };
+  //   } catch (error) {
+  //     throw new Error(`Error al aceptar la transferencia: ${error.message}`);
+  //   }
+  // }
+
   async createTransferencia(idSolicitudTransferencia: number, userID: number) {
     try {
       // Encontrar la solicitud de transferencia
       const solicitudTransferencia =
         await this.prisma.solicitudTransferenciaProducto.findUnique({
           where: { id: idSolicitudTransferencia },
+          include: {
+            producto: { select: { nombre: true } },
+            sucursalOrigen: { select: { nombre: true } },
+            sucursalDestino: { select: { nombre: true } },
+            usuarioSolicitante: { select: { id: true, nombre: true } },
+          },
         });
 
       if (!solicitudTransferencia) {
@@ -128,6 +196,22 @@ export class SolicitudTransferenciaProductoService {
 
       // Ejecutar la transferencia
       const transferencia = await this.transferirProducto(dto);
+      const product = await this.prisma.producto.findUnique({
+        where: {
+          id: solicitudTransferencia.productoId,
+        },
+      });
+
+      // Crear la notificación para el usuario solicitante
+      const mensaje = `Un administrador aceptó tu solicitud de transferencia para el producto "${product.nombre}".`;
+
+      await this.notificationService.createOneNotification(
+        mensaje,
+        userID,
+        solicitudTransferencia.usuarioSolicitante.id,
+        'TRANSFERENCIA',
+        idSolicitudTransferencia,
+      );
 
       // Eliminar la solicitud de transferencia después de completar la transferencia
       await this.prisma.solicitudTransferenciaProducto.delete({
@@ -135,9 +219,41 @@ export class SolicitudTransferenciaProductoService {
       });
 
       return {
-        message: 'Transferencia realizada y solicitud eliminada con éxito',
+        message:
+          'Transferencia realizada, solicitud eliminada y notificación enviada con éxito',
         transferencia,
       };
+    } catch (error) {
+      throw new Error(`Error al aceptar la transferencia: ${error.message}`);
+    }
+  }
+
+  async rechazarTransferencia(
+    idSolicitudTransferencia: number,
+    userID: number,
+  ) {
+    try {
+      const solicituDelete =
+        await this.prisma.solicitudTransferenciaProducto.delete({
+          where: {
+            id: idSolicitudTransferencia,
+          },
+        });
+
+      const product = await this.prisma.producto.findUnique({
+        where: {
+          id: solicituDelete.productoId,
+        },
+      });
+
+      // CREAR UNA NOTIFICACION Y ENVIARLA CON EL METODO
+      await this.notificationService.createOneNotification(
+        `Un administrador rechazó tu solicitud de transferencia para el producto "${product.nombre}"`,
+        userID,
+        solicituDelete.usuarioSolicitanteId,
+        'TRANSFERENCIA',
+        // solicitudTranferenciaDetalles.id,
+      );
     } catch (error) {
       throw new Error(`Error al aceptar la transferencia: ${error.message}`);
     }

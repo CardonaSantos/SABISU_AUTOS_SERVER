@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Delete,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { SolicitudTransferenciaProductoService } from './solicitud-transferencia-producto.service';
 import { CreateSolicitudTransferenciaProductoDto } from './dto/create-solicitud-transferencia-producto.dto';
@@ -33,6 +34,18 @@ export class SolicitudTransferenciaProductoController {
     @Body('userID') userID: number,
   ) {
     return this.solicitudTransferenciaProductoService.createTransferencia(
+      idSolicitudTransferencia,
+      userID,
+    );
+  }
+
+  @Delete('/rechazar/:idSolicitudTransferencia/:userID')
+  async rechazarTransferencia(
+    @Param('idSolicitudTransferencia', ParseIntPipe)
+    idSolicitudTransferencia: number,
+    @Param('userID', ParseIntPipe) userID: number,
+  ) {
+    return this.solicitudTransferenciaProductoService.rechazarTransferencia(
       idSolicitudTransferencia,
       userID,
     );

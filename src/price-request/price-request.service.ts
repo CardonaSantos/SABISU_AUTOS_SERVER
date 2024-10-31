@@ -43,7 +43,7 @@ export class PriceRequestService {
       const adminIds = admins.map((admin) => admin.id);
 
       await this.notificationService.create(
-        `El usuario ${user.nombre} ha solicitado un precio de Q${nuevaSolicitud.precioSolicitado} especial para el producto "${productoDetalles.nombre}"`,
+        `El usuario ${user.nombre} ha solicitado un precio especial de Q${nuevaSolicitud.precioSolicitado} para el producto "${productoDetalles.nombre}".`,
         nuevaSolicitud.solicitadoPorId,
         adminIds, // Pasamos todos los admin IDs aquí
         'SOLICITUD_PRECIO',
@@ -146,7 +146,7 @@ export class PriceRequestService {
           `Un administrador ha aceptado tu solicitud de precio para el producto "${producto.nombre}"`,
           idUser,
           solicitudAprobada.solicitadoPorId,
-          'OTRO',
+          'SOLICITUD_PRECIO',
         );
       console.log('Notificación de confirmación: ', nuevaNotificacion);
 
@@ -183,7 +183,7 @@ export class PriceRequestService {
             `Un administrador ha rechazado tu solicitud de precio para el producto "${producto.nombre}"`,
             idUser,
             solicitudEliminada.solicitadoPorId,
-            'OTRO',
+            'SOLICITUD_PRECIO',
           );
         console.log('Notificación de rechazo creada:', notificacionRechazo);
       }

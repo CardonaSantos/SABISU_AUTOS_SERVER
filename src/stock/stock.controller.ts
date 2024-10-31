@@ -11,6 +11,7 @@ import {
 import { StockService } from './stock.service';
 import { CreateStockDto, StockEntryDTO } from './dto/create-stock.dto';
 import { UpdateStockDto } from './dto/update-stock.dto';
+import { DeleteStockDto } from './dto/delete-stock.dto';
 
 @Controller('stock')
 export class StockController {
@@ -32,6 +33,18 @@ export class StockController {
   @Get(':id')
   async findOne(@Param('id', ParseIntPipe) id: number) {
     return await this.stockService.findOne(id);
+  }
+
+  @Get('/get-one-stock/:id')
+  async findOneStock(@Param('id', ParseIntPipe) id: number) {
+    return await this.stockService.findOneStock(id);
+  }
+
+  @Post('/delete-stock')
+  async deleteOneStock(@Body() dto: DeleteStockDto) {
+    console.log('En el controller del delete stock llega: ', dto);
+
+    return await this.stockService.deleteOneStock(dto);
   }
 
   @Patch(':id')

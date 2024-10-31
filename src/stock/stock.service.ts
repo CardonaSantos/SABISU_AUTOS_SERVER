@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -7,10 +8,15 @@ import { CreateStockDto, StockEntryDTO } from './dto/create-stock.dto';
 import { UpdateStockDto } from './dto/update-stock.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateEntregaStockDto } from 'src/entrega-stock/dto/create-entrega-stock.dto';
+import { AjusteStockService } from 'src/ajuste-stock/ajuste-stock.service';
+import { DeleteStockDto } from './dto/delete-stock.dto';
 @Injectable()
 export class StockService {
   //
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly ajusteStock: AjusteStockService,
+  ) {}
 
   async create(createStockDto: StockEntryDTO) {
     try {
@@ -96,6 +102,115 @@ export class StockService {
     }
   }
 
+  async findOneStock(id: number) {
+    try {
+      const stock = await this.prisma.stock.findUnique({
+        where: { id },
+        include: {
+          producto: {
+            select: {
+              nombre: true,
+              id: true,
+            },
+          },
+        },
+      });
+      if (!stock) {
+        throw new NotFoundException(`Stock con ID ${id} no encontrado`);
+      }
+      return stock;
+    } catch (error) {
+      console.error(error);
+      throw new InternalServerErrorException('Error al encontrar el stock');
+    }
+  }
+
+  // async deleteOneStock(dto: DeleteStockDto) {
+  //   try {
+  //     // Obtener los datos del stock antes de eliminarlo
+  //     const stockToDelete = await this.prisma.stock.findUnique({
+  //       where: {
+  //         id: dto.stockId,
+  //       },
+  //       include: {
+  //         producto: true,
+  //         sucursal: true,
+  //       },
+  //     });
+
+  //     if (!stockToDelete) {
+  //       throw new BadRequestException('Stock no encontrado');
+  //     }
+
+  //     // Eliminar el stock
+  //     await this.prisma.stock.delete({
+  //       where: {
+  //         id: dto.stockId,
+  //       },
+  //     });
+
+  //     // Crear el registro en EliminacionStock
+  //     const registroEliminacionStock =
+  //       await this.prisma.eliminacionStock.create({
+  //         data: {
+  //           stockId: dto.stockId,
+  //           productoId: dto.productoId,
+  //           sucursalId: dto.sucursalId,
+  //           usuarioId: dto.usuarioId,
+  //           fechaHora: new Date(),
+  //           motivo: dto.motivo || 'Sin motivo especificado',
+  //         },
+  //       });
+
+  //     console.log('El nuevo registro es: ', registroEliminacionStock);
+
+  //     return registroEliminacionStock;
+  //   } catch (error) {
+  //     console.error(error);
+  //     throw new BadRequestException(
+  //       'Error al eliminar el stock y registrar la eliminación',
+  //     );
+  //   }
+  // }
+
+  async deleteOneStock(dto: DeleteStockDto) {
+    try {
+      // Obtener el stock antes de eliminarlo
+      const stockToDelete = await this.prisma.stock.findUnique({
+        where: { id: dto.stockId },
+      });
+
+      if (!stockToDelete) {
+        throw new BadRequestException('Stock no encontrado');
+      }
+
+      // Crear el registro en EliminacionStock
+      const registroEliminacionStock =
+        await this.prisma.eliminacionStock.create({
+          data: {
+            // stockId: dto.stockId,
+            productoId: dto.productoId,
+            sucursalId: dto.sucursalId,
+            usuarioId: dto.usuarioId,
+            fechaHora: new Date(),
+            motivo: dto.motivo || 'Sin motivo especificado',
+          },
+        });
+
+      // Eliminar el stock
+      await this.prisma.stock.delete({
+        where: { id: dto.stockId },
+      });
+
+      return registroEliminacionStock;
+    } catch (error) {
+      console.error(error);
+      throw new BadRequestException(
+        'Error al eliminar el stock y registrar la eliminación',
+      );
+    }
+  }
+
   async update(id: number, updateStockDto: UpdateStockDto) {
     try {
       const stock = await this.prisma.stock.update({
@@ -134,6 +249,33 @@ export class StockService {
     } catch (error) {
       console.error(error);
       throw new InternalServerErrorException('Error al eliminar el stock');
+    }
+  }
+
+  async deleteStock(idStock: number, userID: number) {
+    try {
+      const stockToDelete = await this.prisma.stock.findUnique({
+        where: {
+          id: idStock,
+        },
+      });
+
+      if (!stockToDelete) {
+        throw new BadRequestException('Error al encontrar stock para eliminar');
+      }
+
+      await this.prisma.stock.delete({
+        where: {
+          id: stockToDelete.id,
+        },
+      });
+
+      console.log('El stock a sido eliminado');
+
+      return stockToDelete;
+    } catch (error) {
+      console.log(error);
+      throw new InternalServerErrorException('Error al eliminar stock ');
     }
   }
 }

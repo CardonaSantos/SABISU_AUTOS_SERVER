@@ -95,6 +95,13 @@ model Producto {
   precioCostoActual Float?
   // Historial de precios de costo
   HistorialPrecioCosto HistorialPrecioCosto[]
+
+  //AJUSTE
+  AjusteStock AjusteStock[]
+
+  EliminacionProducto EliminacionProducto[]
+
+  EliminacionStock EliminacionStock[]
 }
 
 model HistorialPrecioCosto {
@@ -133,6 +140,63 @@ model HistorialPrecio {
   fechaCambio     DateTime    @default(now())
 }
 
+//=======================>
+model AjusteStock {
+  id               Int      @id @default(autoincrement())
+  producto         Producto @relation(fields: [productoId], references: [id])
+  productoId       Int
+  stock            Stock?   @relation(fields: [stockId], references: [id]) // Relación opcional al stock
+  stockId          Int?     // Campo opcional para identificar el stock modificado
+  cantidadAjustada Int
+  tipoAjuste       TipoAjuste
+  fechaHora        DateTime @default(now())
+  usuario          Usuario?  @relation(fields: [usuarioId], references: [id])
+  usuarioId        Int?
+  descripcion      String?  // Campo opcional para el motivo del ajuste
+}
+
+
+model EliminacionStock {
+  id           Int       @id @default(autoincrement())
+  producto     Producto  @relation(fields: [productoId], references: [id])
+  
+  productoId   Int       // Producto asociado al stock eliminado
+  fechaHora    DateTime  @default(now())
+  usuario      Usuario?  @relation(fields: [usuarioId], references: [id])
+  usuarioId    Int?      // Usuario que realizó la eliminación
+  sucursal     Sucursal?  @relation(fields: [sucursalId], references: [id])
+  sucursalId   Int?       // Sucursal donde se eliminó el stock
+  motivo       String?   // Razón de la eliminación (opcional)
+}
+
+
+// Enum para tipo de ajuste
+enum TipoAjuste {
+  INCREMENTO
+  DECREMENTO
+  CORRECCION
+}
+
+model EliminacionProducto {
+  id           Int        @id @default(autoincrement())
+  producto     Producto   @relation(fields: [productoId], references: [id])
+  productoId   Int        // Referencia al producto eliminado
+  fechaHora    DateTime   @default(now())
+  usuario      Usuario?    @relation(fields: [usuarioId], references: [id])
+  usuarioId    Int?        // Usuario que realizó la eliminación
+  motivo       String?    // Razón de la eliminación (opcional)
+}
+
+model EliminacionCliente {
+  id           Int      @id @default(autoincrement())
+  cliente      Cliente  @relation(fields: [clienteId], references: [id])
+  clienteId    Int      // Referencia al cliente eliminado
+  fechaHora    DateTime @default(now())
+  usuario      Usuario?  @relation(fields: [usuarioId], references: [id])
+  usuarioId    Int?      // Usuario que realizó la eliminación
+  motivo       String?  // Razón de la eliminación (opcional)
+}
+
 model Stock {
   id              Int         @id @default(autoincrement())
   productoId      Int
@@ -151,6 +215,10 @@ model Stock {
 
 
   Vencimiento Vencimiento[]
+
+  //AJUSTES DE STOCKS
+  AjusteStock AjusteStock[]
+
 }
 
 model Sucursal {
@@ -175,6 +243,8 @@ model Sucursal {
   // Relaciones para solicitudes de transferencia
   solicitudesOrigen    SolicitudTransferenciaProducto[] @relation("SucursalOrigenSolicitud")
   solicitudesDestino   SolicitudTransferenciaProducto[] @relation("SucursalDestinoSolicitud")
+
+  EliminacionStock EliminacionStock[]
 }
 
 model EntregaStock {
@@ -218,12 +288,21 @@ model Usuario {
 
   //RECIOS QUE EL WN MODIFICÓ
   HistorialPrecioCosto HistorialPrecioCosto[]
+
+//REGISTROS DE AJUSTES DE STOCKS
+  AjusteStock AjusteStock[]
+
+  EliminacionProducto EliminacionProducto[]
+
+  EliminacionCliente EliminacionCliente[]
+
+  EliminacionStock EliminacionStock[]
 }
 
 model Cliente {
   id              Int          @id @default(autoincrement())
   nombre          String
-  correo          String       @unique
+  // correo          String?       
   telefono        String?
   direccion       String?
   compras         Venta[]
@@ -233,6 +312,11 @@ model Cliente {
   municipio       Municipio?   @relation(fields: [municipioId], references: [id], onDelete: SetNull) // EN UBICACION TABLA
   departamentoId  Int?         // EN UBICACION TABLA
   departamento    Departamento? @relation(fields: [departamentoId], references: [id], onDelete: SetNull) // EN UBICACION TABLA
+  EliminacionCliente EliminacionCliente[]
+  //nuevo dpi
+  dpi             String?      // Campo DPI opcional
+  
+  @@unique([dpi, id]) // Índice compuesto que permite múltiples `null` en `dpi`
 }
 
 
@@ -270,6 +354,9 @@ model Venta {
   nombreClienteFinal String?
   telefonoClienteFinal String?
   direccionClienteFinal String?
+  //IMEI
+  imei                String?        
+  @@unique([imei, id]) // Permite null en `imei` sin conflicto de unicidad 
 }
 
 model TransferenciaProducto {
@@ -321,8 +408,8 @@ model VentaProducto {
 model Proveedor {
   id              Int              @id @default(autoincrement())
   nombre          String
-  correo          String           @unique
-  telefono        String
+  correo          String?           
+  telefono        String?
   direccion       String?
   razonSocial     String?
   rfc             String?

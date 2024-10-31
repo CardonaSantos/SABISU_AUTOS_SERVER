@@ -19,6 +19,11 @@ import { GatewayModule } from './web-sockets/websocket.module';
 import { NotificationModule } from './notification/notification.module';
 import { PriceRequestModule } from './price-request/price-request.module';
 import { SolicitudTransferenciaProductoModule } from './solicitud-transferencia-producto/solicitud-transferencia-producto.module';
+import { AjusteStockModule } from './ajuste-stock/ajuste-stock.module';
+import { ProductRemoveModule } from './product-remove/product-remove.module';
+import { ClientRemoveModule } from './client-remove/client-remove.module';
+import { StockRemoveModule } from './stock-remove/stock-remove.module';
+import { ClientModule } from './client/client.module';
 
 @Module({
   imports: [
@@ -43,6 +48,11 @@ import { SolicitudTransferenciaProductoModule } from './solicitud-transferencia-
     NotificationModule,
     PriceRequestModule,
     SolicitudTransferenciaProductoModule,
+    AjusteStockModule,
+    ProductRemoveModule,
+    ClientRemoveModule,
+    StockRemoveModule,
+    ClientModule,
   ],
   controllers: [AppController],
   providers: [AppService],
