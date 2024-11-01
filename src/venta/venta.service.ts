@@ -217,7 +217,7 @@ export class VentaService {
       if (clienteId) {
         // Cliente ya existe
         cliente = { connect: { id: clienteId } };
-      } else if (nombre && dpi) {
+      } else if (nombre && telefono) {
         // Crear cliente nuevo
         const nuevoCliente = await this.clienteService.create({
           nombre,
@@ -409,6 +409,7 @@ export class VentaService {
         where: {
           id: id,
         },
+
         include: {
           cliente: true,
           metodoPago: true,
@@ -424,6 +425,9 @@ export class VentaService {
           productos: {
             include: {
               producto: true,
+            },
+            orderBy: {
+              precioVenta: 'desc',
             },
           },
         },
