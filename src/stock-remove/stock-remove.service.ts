@@ -45,6 +45,9 @@ export class StockRemoveService {
             },
           },
         },
+        orderBy: {
+          fechaHora: 'desc',
+        },
       });
 
       if (!regists) {

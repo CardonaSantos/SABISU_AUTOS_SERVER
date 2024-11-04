@@ -12,6 +12,8 @@ export class ClientService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(createClientDto: CreateClientDto) {
+    console.log('La data entrando al client es: ', createClientDto);
+
     try {
       const client = await this.prisma.cliente.create({
         data: {
@@ -25,6 +27,8 @@ export class ClientService {
       if (!client) {
         throw new BadRequestException('Error al crear cliente');
       }
+
+      console.log('El cliente creado es: ', client);
 
       return client;
     } catch (error) {
@@ -43,6 +47,11 @@ export class ClientService {
           dpi: true,
           direccion: true,
           actualizadoEn: true,
+          _count: {
+            select: {
+              compras: true,
+            },
+          },
         },
       });
 
@@ -67,6 +76,16 @@ export class ClientService {
 
   update(id: number, updateClientDto: UpdateClientDto) {
     return `This action updates a #${id} client`;
+  }
+
+  async removeAll() {
+    try {
+      const clientes = await this.prisma.cliente.deleteMany({});
+      return clientes;
+    } catch (error) {
+      console.log(error);
+      throw new InternalServerErrorException('Error');
+    }
   }
 
   remove(id: number) {

@@ -314,9 +314,18 @@ model Cliente {
   departamento    Departamento? @relation(fields: [departamentoId], references: [id], onDelete: SetNull) // EN UBICACION TABLA
   EliminacionCliente EliminacionCliente[]
   //nuevo dpi
+
   dpi             String?      // Campo DPI opcional
   
-  @@unique([dpi, id]) // Índice compuesto que permite múltiples `null` en `dpi`
+  @@unique([dpi, id]) // Índice compuesto que permite múltiples null en dpi
+
+  // dpi             String?      // Campo DPI opcional
+  
+  // @@unique([dpi, id]) // Índice compuesto que permite múltiples `null` en `dpi`
+  // dpi               String?       @unique // Configura la unicidad directamente en dpi
+  // dpi             String? @unique // Campo DPI opcional pero único
+  
+  // @@index([dpi], name: "dpi_index")
 }
 
 

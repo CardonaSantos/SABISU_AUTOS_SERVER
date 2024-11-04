@@ -40,6 +40,11 @@ export class ClientController {
     return this.clientService.update(+id, updateClientDto);
   }
 
+  @Delete('/delete-all')
+  removeAll() {
+    return this.clientService.removeAll();
+  }
+
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.clientService.remove(+id);
