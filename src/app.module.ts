@@ -24,6 +24,8 @@ import { ProductRemoveModule } from './product-remove/product-remove.module';
 import { ClientRemoveModule } from './client-remove/client-remove.module';
 import { StockRemoveModule } from './stock-remove/stock-remove.module';
 import { ClientModule } from './client/client.module';
+import { WarrantyModule } from './warranty/warranty.module';
+import { TicketModule } from './ticket/ticket.module';
 
 @Module({
   imports: [
@@ -53,6 +55,8 @@ import { ClientModule } from './client/client.module';
     ClientRemoveModule,
     StockRemoveModule,
     ClientModule,
+    WarrantyModule,
+    TicketModule,
   ],
   controllers: [AppController],
   providers: [AppService],

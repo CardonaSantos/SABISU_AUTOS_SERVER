@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Delete,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { ClientService } from './client.service';
 import { CreateClientDto } from './dto/create-client.dto';
@@ -36,8 +37,11 @@ export class ClientController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateClientDto: UpdateClientDto) {
-    return this.clientService.update(+id, updateClientDto);
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateClientDto: UpdateClientDto,
+  ) {
+    return this.clientService.update(id, updateClientDto);
   }
 
   @Delete('/delete-all')

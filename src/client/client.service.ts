@@ -53,6 +53,9 @@ export class ClientService {
             },
           },
         },
+        orderBy: {
+          creadoEn: 'desc',
+        },
       });
 
       if (!clientes) {
@@ -74,8 +77,29 @@ export class ClientService {
     return `This action returns a #${id} client`;
   }
 
-  update(id: number, updateClientDto: UpdateClientDto) {
-    return `This action updates a #${id} client`;
+  async update(id: number, updateClientDto: UpdateClientDto) {
+    try {
+      console.log('La data llegando es: ', updateClientDto);
+
+      const userUpdated = await this.prisma.cliente.update({
+        where: {
+          id: id,
+        },
+        data: {
+          nombre: updateClientDto.nombre,
+          telefono: updateClientDto.telefono,
+          direccion: updateClientDto.direccion,
+          dpi: updateClientDto.dpi,
+        },
+      });
+
+      console.log('user actualizado', userUpdated);
+
+      return userUpdated;
+    } catch (error) {
+      console.log(error);
+      throw new InternalServerErrorException('Error al editar cliente');
+    }
   }
 
   async removeAll() {
@@ -88,7 +112,17 @@ export class ClientService {
     }
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} client`;
+  async remove(id: number) {
+    try {
+      const userToDelete = await this.prisma.cliente.delete({
+        where: {
+          id,
+        },
+      });
+      return userToDelete;
+    } catch (error) {
+      console.log(error);
+      throw new BadRequestException('Error al intentar eliminar el cliente');
+    }
   }
 }

@@ -13,6 +13,21 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model TicketSorteo {
+  id              Int       @id @default(autoincrement()) // ID único para cada sorteo
+  descripcionSorteo String?   // Descripción del sorteo, incluyendo detalles sobre premios
+  // fechaInicio     DateTime?  // Fecha y hora de inicio del sorteo
+  // fechaFinal      DateTime?  // Fecha y hora de finalización del sorteo
+  creadoEn        DateTime  @default(now()) // Fecha de creación del registro
+  actualizadoEn   DateTime  @updatedAt // Fecha de la última actualización
+  estado          EstadoTicket 
+}
+
+enum EstadoTicket {
+  ACTIVO         // El sorteo está en curso
+  INACTIVO     // El sorteo ha finalizado
+}
+
 model Vencimiento {
   id                     Int          @id @default(autoincrement())
   fechaVencimiento      DateTime     // Fecha de vencimiento
@@ -102,7 +117,10 @@ model Producto {
   EliminacionProducto EliminacionProducto[]
 
   EliminacionStock EliminacionStock[]
+  //PARA USARLO EN GARANTÍAS
+  Garantia Garantia[]
 }
+
 
 model HistorialPrecioCosto {
   id                Int       @id @default(autoincrement())
@@ -168,8 +186,6 @@ model EliminacionStock {
   sucursalId   Int?       // Sucursal donde se eliminó el stock
   motivo       String?   // Razón de la eliminación (opcional)
 }
-
-
 // Enum para tipo de ajuste
 enum TipoAjuste {
   INCREMENTO
@@ -280,8 +296,8 @@ model Usuario {
   notificacionesRecibidas Notificacion[] @relation("Destinatario")
 
   notificacionesUsuarios  NotificacionesUsuarios[]  // Relación con tabla intermedia
-//NUEVAS PARA SOLICITAR TRANSFERENCIA
-// Relaciones para las solicitudes de transferencia de productos
+  //NUEVAS PARA SOLICITAR TRANSFERENCIA
+  // Relaciones para las solicitudes de transferencia de productos
   // Relaciones para las solicitudes de transferencia de productos
   solicitudesEnviadas      SolicitudTransferenciaProducto[] @relation("UsuarioSolicitante")
   solicitudesAprobadasTransferencia SolicitudTransferenciaProducto[] @relation("AdministradorAprobador") // Renombrada para especificidad
@@ -297,6 +313,10 @@ model Usuario {
   EliminacionCliente EliminacionCliente[]
 
   EliminacionStock EliminacionStock[]
+
+  RegistroGarantia RegistroGarantia[]
+
+  Garantia Garantia[]
 }
 
 model Cliente {
@@ -313,21 +333,59 @@ model Cliente {
   departamentoId  Int?         // EN UBICACION TABLA
   departamento    Departamento? @relation(fields: [departamentoId], references: [id], onDelete: SetNull) // EN UBICACION TABLA
   EliminacionCliente EliminacionCliente[]
-  //nuevo dpi
-
   dpi             String?      // Campo DPI opcional
   
   @@unique([dpi, id]) // Índice compuesto que permite múltiples null en dpi
-
-  // dpi             String?      // Campo DPI opcional
-  
-  // @@unique([dpi, id]) // Índice compuesto que permite múltiples `null` en `dpi`
-  // dpi               String?       @unique // Configura la unicidad directamente en dpi
-  // dpi             String? @unique // Campo DPI opcional pero único
-  
-  // @@index([dpi], name: "dpi_index")
+  //PARA LAS GARANTÍAS
+  Garantia Garantia[]
 }
 
+
+model Garantia {
+  id                 Int                @id @default(autoincrement())
+  //SELECCIONAR EL CLIENTE
+  clienteId          Int
+  cliente            Cliente            @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  //SELECCIONAR EL PRODUCTO
+  productoId         Int
+  producto           Producto           @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  //USER QUE RECIBE
+  usuarioIdRecibe    Int?
+  usuarioRecibe      Usuario?            @relation(fields: [usuarioIdRecibe], references: [id], onDelete: SetNull)
+  //COMENTARIO
+  comentario         String?            // Comentario sobre el fallo
+  descripcionProblema String            // Descripción detallada del problema
+  fechaRecepcion     DateTime           @default(now())
+  estado             EstadoGarantia     @default(RECIBIDO)  // Estado inicial de la garantía
+  registros          RegistroGarantia[] // Relación con el historial de la garantía
+  creadoEn           DateTime           @default(now())
+  actualizadoEn      DateTime           @updatedAt
+}
+
+model RegistroGarantia {
+  id                Int                @id @default(autoincrement())
+  garantiaId        Int
+  garantia          Garantia           @relation(fields: [garantiaId], references: [id], onDelete: Cascade)
+  //USUARIO QUE RECIBE
+  usuarioId         Int?
+  usuario           Usuario?            @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+  //PROVEEDOR SI LO SELECCIONARÍAMOS
+  proveedorId       Int?               // Opcional en caso de envío a un proveedor
+  proveedor         Proveedor?         @relation(fields: [proveedorId], references: [id], onDelete: SetNull)
+  //OTROS
+  estado            EstadoGarantia     // Estado en este punto del registro
+  comentario        String?            // Comentario opcional sobre el estado o proceso
+  fechaRegistro     DateTime           @default(now())
+}
+
+enum EstadoGarantia {
+  RECIBIDO           // Producto recibido en garantía
+  ENVIADO_A_PROVEEDOR // Enviado a proveedor para reparación
+  EN_REPARACION       // Producto en reparación
+  REPARADO            // Reparación completada
+  ENTREGADO_CLIENTE   // Producto devuelto al cliente
+  CERRADO             // Caso cerrado
+}
 
 model Pago {
   id              Int       @id @default(autoincrement())
@@ -401,7 +459,6 @@ model TransferenciaProducto {
   // motivoRechazo         String?                                          // Motivo de rechazo, si es rechazado
 }
 
-
 model VentaProducto {
   id              Int         @id @default(autoincrement())
   ventaId         Int         // Relación con la venta
@@ -435,6 +492,8 @@ model Proveedor {
   notas           String?
   creadoEn        DateTime         @default(now())
   actualizadoEn   DateTime         @updatedAt
+
+  RegistroGarantia RegistroGarantia[]
 }
 
 model Categoria {
