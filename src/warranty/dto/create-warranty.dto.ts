@@ -1,4 +1,12 @@
-import { IsInt, IsOptional, IsString, IsNotEmpty } from 'class-validator';
+import { EstadoGarantia } from '@prisma/client';
+import {
+  IsInt,
+  IsOptional,
+  IsString,
+  IsNotEmpty,
+  IsEnum,
+  IsNumber,
+} from 'class-validator';
 
 export class CreateWarrantyDto {
   @IsInt()
@@ -17,4 +25,11 @@ export class CreateWarrantyDto {
   @IsNotEmpty()
   @IsString()
   descripcionProblema: string; // Descripción detallada del problema
+
+  @IsEnum(EstadoGarantia)
+  estado: EstadoGarantia;
+
+  @IsOptional()
+  @IsNumber()
+  proveedorId?;
 }

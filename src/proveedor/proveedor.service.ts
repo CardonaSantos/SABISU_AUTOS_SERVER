@@ -106,6 +106,24 @@ export class ProveedorService {
     }
   }
 
+  async findProvidersWarranty() {
+    try {
+      const proveedor = await this.prisma.proveedor.findMany({
+        select: {
+          id: true,
+          nombre: true,
+        },
+      });
+      if (!proveedor) {
+        throw new NotFoundException(`Proveedor no encontrado`);
+      }
+      return proveedor;
+    } catch (error) {
+      console.error(error);
+      throw new InternalServerErrorException('Error al encontrar el proveedor');
+    }
+  }
+
   async update(id: number, updateProveedorDto: UpdateProveedorDto) {
     // try {
     //   const proveedor = await this.prisma.proveedor.update({

@@ -55,6 +55,11 @@ export class ProductsController {
     return await this.productsService.productHistorialPrecios();
   }
 
+  @Get('/product-to-warranty')
+  async productToWarranty() {
+    return await this.productsService.productToWarranty();
+  }
+
   @Get(':id')
   async findOne(@Param('id', ParseIntPipe) id: number) {
     return await this.productsService.findOne(id);

@@ -41,6 +41,23 @@ export class AnalyticsController {
     return this.analyticsService.getTotalVentasMontoSemana(id);
   }
 
+  //PARA EL CHART DEL DASHBOARD:
+  @Get('/get-ventas/semanal-chart/:id')
+  getVentasSemanalChart(@Param('id', ParseIntPipe) id: number) {
+    return this.analyticsService.getVentasSemanalChart(id);
+  }
+
+  //PRODUCTOSD MÁS VENDIDOS
+  @Get('/get-productos-mas-vendidos/')
+  getProductosMasVendidos() {
+    return this.analyticsService.getProductosMasVendidos();
+  }
+
+  @Get('/get-ventas-recientes/')
+  getVentasRecientes() {
+    return this.analyticsService.getVentasRecientes();
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.analyticsService.findOne(+id);

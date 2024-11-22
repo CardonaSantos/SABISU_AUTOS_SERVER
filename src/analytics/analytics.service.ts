@@ -1,4 +1,8 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { CreateAnalyticsDto } from './dto/create-analytics.dto';
 import { UpdateAnalyticsDto } from './dto/update-analytics.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -53,6 +57,138 @@ export class AnalyticsService {
       throw new InternalServerErrorException(
         'Error al calcular el monto total de ventas de la semana',
       );
+    }
+  }
+
+  async getVentasSemanalChart(sucursalId: number) {
+    try {
+      const fechaActual = new Date();
+
+      // Calcular el primer día de la semana (lunes)
+      const diaSemana = fechaActual.getDay();
+      const diferencia = diaSemana === 0 ? -6 : 1 - diaSemana;
+      const primerDiaSemana = new Date(
+        fechaActual.setDate(fechaActual.getDate() + diferencia),
+      );
+      primerDiaSemana.setHours(0, 0, 0, 0);
+
+      const ultimoDiaSemana = new Date(primerDiaSemana);
+      ultimoDiaSemana.setDate(primerDiaSemana.getDate() + 6);
+      ultimoDiaSemana.setHours(23, 59, 59, 999);
+
+      // Obtener ventas agrupadas por día de la semana con suma y conteo
+      const ventasPorDia = await this.prisma.venta.groupBy({
+        by: ['fechaVenta'],
+        where: {
+          sucursalId: sucursalId,
+          fechaVenta: {
+            gte: primerDiaSemana,
+            lte: ultimoDiaSemana,
+          },
+        },
+        _sum: {
+          totalVenta: true,
+        },
+        _count: {
+          id: true,
+        },
+      });
+
+      const diasSemana = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+      const ventasSemanal = diasSemana.map((dia, index) => ({
+        dia,
+        totalVenta: 0,
+        ventas: 0,
+        fecha: new Date(
+          primerDiaSemana.getTime() + index * 24 * 60 * 60 * 1000,
+        ).toISOString(),
+      }));
+
+      // Asignar los montos de ventas y cantidad de ventas a cada día correspondiente
+      ventasPorDia.forEach((venta) => {
+        const fechaVenta = new Date(venta.fechaVenta);
+        fechaVenta.setHours(0, 0, 0, 0); // Normalizar la fecha para asegurarnos de que coincida solo por día
+        const diaIndex = (fechaVenta.getDay() + 6) % 7; // Convertir para que el índice empiece en lunes
+
+        if (ventasSemanal[diaIndex]) {
+          ventasSemanal[diaIndex].totalVenta += venta._sum.totalVenta || 0;
+          ventasSemanal[diaIndex].ventas += venta._count.id || 0;
+        }
+      });
+
+      return ventasSemanal;
+    } catch (error) {
+      console.log(error);
+      throw new InternalServerErrorException(
+        'Error al calcular el monto total de ventas de la semana',
+      );
+    }
+  }
+
+  async getProductosMasVendidos() {
+    try {
+      // Consulta para obtener los 10 productos más vendidos en una sucursal específica
+      const productosMasVendidos = await this.prisma.producto.findMany({
+        include: {
+          ventas: {
+            select: {
+              cantidad: true,
+            },
+          },
+        },
+      });
+
+      // Calcular la suma total de ventas por producto
+      const productosConTotalVentas = productosMasVendidos.map((producto) => {
+        const totalVentas = producto.ventas.reduce(
+          (total, venta) => total + venta.cantidad,
+          0,
+        );
+        return {
+          id: producto.id,
+          nombre: producto.nombre,
+          totalVentas,
+        };
+      });
+
+      // Ordenar los productos por el total de ventas y tomar los 10 primeros
+      const topProductos = productosConTotalVentas
+        .sort((a, b) => b.totalVentas - a.totalVentas)
+        .slice(0, 10);
+
+      return topProductos;
+    } catch (error) {
+      console.log(error);
+      throw new InternalServerErrorException(
+        'Error al calcular los productos más vendidos',
+      );
+    }
+  }
+
+  async getVentasRecientes() {
+    try {
+      const ventasRecientes = await this.prisma.venta.findMany({
+        take: 10,
+        orderBy: {
+          fechaVenta: 'desc',
+        },
+        select: {
+          id: true,
+          fechaVenta: true,
+          totalVenta: true,
+          sucursal: {
+            select: {
+              id: true,
+              nombre: true,
+            },
+          },
+        },
+      });
+
+      return ventasRecientes;
+    } catch (error) {
+      console.log(error);
+      throw new BadRequestException('Error al conseguir ventas recientes');
     }
   }
 

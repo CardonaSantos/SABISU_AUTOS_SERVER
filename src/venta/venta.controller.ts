@@ -28,6 +28,11 @@ export class VentaController {
     return await this.ventaService.findAll();
   }
 
+  @Get('/get-ventas-caja/:id')
+  async getSalesToCashRegist(@Param('id', ParseIntPipe) id: number) {
+    return await this.ventaService.getSalesToCashRegist(id);
+  }
+
   @Get('/get-sale/:id')
   async findOne(@Param('id', ParseIntPipe) id: number) {
     return await this.ventaService.findOneSale(id);

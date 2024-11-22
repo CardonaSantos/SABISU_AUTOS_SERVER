@@ -31,6 +31,11 @@ export class ClientController {
     return this.clientService.Customers();
   }
 
+  @Get('/customers-to-warranty')
+  findCustomersToWarranty() {
+    return this.clientService.findCustomersToWarranty();
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.clientService.findOne(+id);

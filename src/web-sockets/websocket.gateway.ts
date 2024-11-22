@@ -12,7 +12,7 @@ import { Injectable } from '@nestjs/common';
 import { NotificationToEmit } from './Types/NotificationTypeSocket';
 import { nuevaSolicitud } from './Types/SolicitudType';
 import { solicitudTransferencia } from './Types/TransferenciaType';
-
+import EventEmitter from 'events';
 @Injectable()
 @WebSocketGateway()
 export class WebsocketGateway
@@ -21,6 +21,7 @@ export class WebsocketGateway
   @WebSocketServer()
   server: Server;
 
+  // EventEmitter.defaultMaxListeners = 30; // O cualquier número que consideres adecuado
   // Mantenemos tres mapas separados para diferentes roles
   private vendedores: Map<number, string> = new Map();
   private admins: Map<number, string> = new Map();
@@ -36,32 +37,65 @@ export class WebsocketGateway
     return client.handshake.query.rol as string;
   }
 
+  // handleConnection(client: Socket) {
+  //   const userID = this.getUserIDFromClient(client);
+  //   const rol = this.getUserRoleFromClient(client);
+
+  //   // Validamos que el userID sea un número y que no esté duplicado
+  //   if (!isNaN(userID)) {
+  //     if (this.usuarios.has(userID)) {
+  //       console.log(`Conexión duplicada detectada para el usuario ${userID}.`);
+  //       client.disconnect(); // Desconecta el socket duplicado
+  //     } else {
+  //       this.usuarios.set(userID, client.id); // Guardamos en el mapa general
+
+  //       // Asignamos al mapa correspondiente según el rol
+  //       if (rol === 'ADMIN') {
+  //         this.admins.set(userID, client.id);
+  //       } else {
+  //         this.vendedores.set(userID, client.id);
+  //       }
+
+  //       console.log(
+  //         `Cliente conectado: UserID: ${userID}, SocketID: ${client.id}`,
+  //       );
+  //       this.logUsuarios(); // Log de los usuarios conectados
+  //     }
+  //   } else {
+  //     console.log(`ID de usuario inválido: ${userID}`);
+  //   }
+  // }
   handleConnection(client: Socket) {
+    client.setMaxListeners(40); // Cambia 30 al valor que necesites
     const userID = this.getUserIDFromClient(client);
     const rol = this.getUserRoleFromClient(client);
 
-    // Validamos que el userID sea un número y que no esté duplicado
-    if (!isNaN(userID)) {
-      if (this.usuarios.has(userID)) {
-        console.log(`Conexión duplicada detectada para el usuario ${userID}.`);
-        client.disconnect(); // Desconecta el socket duplicado
-      } else {
-        this.usuarios.set(userID, client.id); // Guardamos en el mapa general
-
-        // Asignamos al mapa correspondiente según el rol
-        if (rol === 'ADMIN') {
-          this.admins.set(userID, client.id);
-        } else {
-          this.vendedores.set(userID, client.id);
-        }
-
-        console.log(
-          `Cliente conectado: UserID: ${userID}, SocketID: ${client.id}`,
-        );
-        this.logUsuarios(); // Log de los usuarios conectados
-      }
-    } else {
+    // Validamos que el userID sea un número válido y que el rol sea reconocido
+    if (!userID || isNaN(userID)) {
       console.log(`ID de usuario inválido: ${userID}`);
+      client.emit('error', { message: 'ID de usuario inválido' });
+      client.disconnect();
+      return;
+    }
+
+    // Verificar si el usuario ya está conectado
+    if (this.usuarios.has(userID)) {
+      console.log(`Conexión duplicada detectada para el usuario ${userID}.`);
+      client.emit('error', { message: 'Ya tienes una sesión activa' });
+      client.disconnect(); // Desconectar el socket duplicado
+    } else {
+      // Añadir el usuario a los mapas
+      this.usuarios.set(userID, client.id);
+      if (rol === 'ADMIN') {
+        this.admins.set(userID, client.id);
+      } else if (rol === 'VENDEDOR') {
+        this.vendedores.set(userID, client.id);
+      }
+
+      console.log(
+        `Cliente conectado: UserID: ${userID}, SocketID: ${client.id}`,
+      );
+      this.logUsuarios(); // Log de los usuarios conectados
     }
   }
 

@@ -81,7 +81,8 @@ export class NotificationService {
 
   async createOneNotification(
     mensaje: string,
-    remitenteId: number,
+
+    remitenteId: number | null,
     usuarioId: number, // el ID del usuario receptor
     tipoNotificacion: TipoNotificacion,
     referenciaId?: number | null,
@@ -90,7 +91,7 @@ export class NotificationService {
       const nuevaNotificacion = await this.prismaService.notificacion.create({
         data: {
           mensaje,
-          remitenteId,
+          remitenteId: remitenteId !== 0 ? remitenteId : null, // Convertir 0 en null,
           tipoNotificacion,
           referenciaId,
         },

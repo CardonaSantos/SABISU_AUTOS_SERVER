@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Vencimiento" ADD COLUMN     "fechaCreacion" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;

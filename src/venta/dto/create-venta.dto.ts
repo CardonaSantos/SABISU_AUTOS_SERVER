@@ -69,6 +69,10 @@ export class CreateVentaDto {
 
   @IsString()
   @IsOptional()
+  iPInternet?: string;
+
+  @IsString()
+  @IsOptional()
   telefono?: string;
 
   @IsString()

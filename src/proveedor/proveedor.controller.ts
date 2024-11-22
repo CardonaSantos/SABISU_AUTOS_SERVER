@@ -36,6 +36,11 @@ export class ProveedorController {
     return await this.proveedorService.findCompleteProvider();
   }
 
+  @Get('/get-provider-to-warranty/')
+  async findProvidersWarranty() {
+    return await this.proveedorService.findProvidersWarranty();
+  }
+
   @Get(':id')
   async findOne(@Param('id', ParseIntPipe) id: number) {
     return await this.proveedorService.findOne(id);

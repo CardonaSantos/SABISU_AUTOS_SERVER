@@ -247,6 +247,20 @@ export class ProductsService {
     }
   }
 
+  async productToWarranty() {
+    try {
+      const products = await this.prisma.producto.findMany({
+        orderBy: {
+          creadoEn: 'desc',
+        },
+      });
+      return products;
+    } catch (error) {
+      console.log(error);
+      throw new InternalServerErrorException('Error al encontrar productos');
+    }
+  }
+
   async findOne(id: number) {
     try {
       const producto = await this.prisma.producto.findUnique({

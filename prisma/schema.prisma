@@ -13,6 +13,95 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+//============================>SALDOS Y OTROS
+// model SucursalSaldo {
+//   id                 Int         @id @default(autoincrement())
+//   sucursalId         Int         // Relación con la sucursal
+//   sucursal           Sucursal    @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+//   saldoAcumulado     Float       @default(0) // Saldo acumulado de la sucursal
+//   totalIngresos      Float       @default(0) // Suma de todos los ingresos (ventas, depósitos)
+//   totalEgresos       Float       @default(0) // Suma de todos los egresos
+//   actualizadoEn      DateTime    @updatedAt
+// }
+model SucursalSaldo {
+  id                 Int         @id @default(autoincrement())
+  sucursalId         Int         @unique // Cada sucursal tiene un único saldo
+  sucursal           Sucursal    @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+  saldoAcumulado     Float       @default(0) // Saldo acumulado de la sucursal
+  totalIngresos      Float       @default(0) // Suma de todos los ingresos (ventas, depósitos)
+  totalEgresos       Float       @default(0) // Suma de todos los egresos
+  actualizadoEn      DateTime    @updatedAt
+}
+
+
+model RegistroCaja {
+  id                 Int             @id @default(autoincrement())
+  sucursalId         Int?             // Relación con la sucursal
+  sucursal           Sucursal?        @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+  usuarioId          Int?            // Usuario responsable del registro
+  usuario            Usuario?        @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+  saldoInicial       Float?           // Saldo del día anterior no depositado
+  // totalVentas        Float           @default(0) // Ventas realizadas durante el turno
+  // totalEgresos       Float           @default(0) // Suma de egresos realizados
+  saldoFinal         Float?           @default(0) // Saldo al cierre del turno
+  fechaInicio        DateTime?        @default(now()) // Inicio del turno
+  fechaCierre        DateTime?       @default(now()) // Inicio del turno
+  estado             EstadoCaja?      @default(ABIERTO) // Estado de la caja
+  depositos          Deposito[]      // Lista de depósitos realizados durante el turno
+  egresos            Egreso[]        // Lista de egresos realizados durante el turno
+  comentario         String?
+  ventas             Venta[]         // Ventas realizadas en este turno
+}
+
+model SucursalSaldoGlobal {
+  id                 Int         @id @default(autoincrement())
+  saldoGlobal        Float       @default(0) // Saldo total acumulado de todas las sucursales
+  totalIngresos      Float       @default(0) // Suma global de ingresos
+  totalEgresos       Float       @default(0) // Suma global de egresos
+  actualizadoEn      DateTime    @updatedAt
+}
+
+model Deposito {
+  id                 Int             @id @default(autoincrement())
+  registroCajaId     Int?            // Relación con el registro de caja
+  registroCaja       RegistroCaja?   @relation(fields: [registroCajaId], references: [id], onDelete: SetNull)
+  monto              Float
+  numeroBoleta       String
+  banco              String
+  fechaDeposito      DateTime        @default(now())
+  usadoParaCierre    Boolean         @default(false)
+  //VINCULAR CON LA SUCURSAL
+  descripcion String?
+  sucursalId     Int?            // Relación con el registro de caja
+  sucursal       Sucursal?   @relation(fields: [sucursalId], references: [id], onDelete: SetNull)
+  //DATOS DE QUIEN DEPOSITÓ
+  usuarioId          Int?            // Usuario responsable del registro
+  usuario            Usuario?        @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+}
+
+model Egreso {
+  id                 Int             @id @default(autoincrement())
+  registroCajaId     Int?            // Relación con el registro de caja
+  registroCaja       RegistroCaja?   @relation(fields: [registroCajaId], references: [id], onDelete: SetNull)
+  descripcion        String?
+  monto              Float
+  fechaEgreso        DateTime        @default(now())
+  //VINCULAR CON LA SUCURSAL
+  sucursalId     Int?            // Relación con el registro de caja
+  sucursal       Sucursal?   @relation(fields: [sucursalId], references: [id], onDelete: SetNull)
+  //DATOS DE QUIEN REGISTRÓ
+  usuarioId          Int?            // Usuario responsable del registro
+  usuario            Usuario?        @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+}
+
+
+enum EstadoCaja {
+  ABIERTO
+  CERRADO
+}
+
+//============================>
+
 model TicketSorteo {
   id              Int       @id @default(autoincrement()) // ID único para cada sorteo
   descripcionSorteo String?   // Descripción del sorteo, incluyendo detalles sobre premios
@@ -37,15 +126,16 @@ model Vencimiento {
   // Relación con Stock
   stockId               Int?         // Relación opcional con Stock
   stock                 Stock?       @relation(fields: [stockId], references: [id], onDelete: SetNull)
-
   // No es necesario incluir notificaciones aquí
+  fechaCreacion     DateTime           @default(now()) // Fecha de creación de la notificación
+
 }
+
 enum EstadoVencimiento {
   PENDIENTE
   NOTIFICADO
   RESUELTO
 }
-
 
 model Notificacion {
   id                Int                @id @default(autoincrement())
@@ -119,6 +209,8 @@ model Producto {
   EliminacionStock EliminacionStock[]
   //PARA USARLO EN GARANTÍAS
   Garantia Garantia[]
+
+  RegistroGarantia RegistroGarantia[]
 }
 
 
@@ -252,15 +344,20 @@ model Sucursal {
   Venta Venta[]
   TransferenciaProducto TransferenciaProducto[] @relation("SucursalOrigen")
   TransferenciaProductoDestino TransferenciaProducto[] @relation("SucursalDestino") // NUEVA RELACIÓN
-
   //NUEVO
   EntregaStock EntregaStock[]
   //NUEVO SOLICITUD TRANSFERENCIA
   // Relaciones para solicitudes de transferencia
   solicitudesOrigen    SolicitudTransferenciaProducto[] @relation("SucursalOrigenSolicitud")
   solicitudesDestino   SolicitudTransferenciaProducto[] @relation("SucursalDestinoSolicitud")
-
   EliminacionStock EliminacionStock[]
+  RegistroCaja RegistroCaja[]
+  //LOS DEPOSITOVS D ELA SUCURSAL
+  Deposito Deposito[]
+  //LOS EGRESOS DE LA SUCURSAL
+  Egreso Egreso[]
+  //UNICA TABLA
+  SucursalSaldo SucursalSaldo?
 }
 
 model EntregaStock {
@@ -317,6 +414,12 @@ model Usuario {
   RegistroGarantia RegistroGarantia[]
 
   Garantia Garantia[]
+
+  RegistroCaja RegistroCaja[]
+
+  Deposito Deposito[]
+
+  Egreso Egreso[]
 }
 
 model Cliente {
@@ -338,6 +441,7 @@ model Cliente {
   @@unique([dpi, id]) // Índice compuesto que permite múltiples null en dpi
   //PARA LAS GARANTÍAS
   Garantia Garantia[]
+  iPInternet String? //IP PARA ENCONTRAR EL PAGO DE INTERNET
 }
 
 
@@ -360,29 +464,41 @@ model Garantia {
   registros          RegistroGarantia[] // Relación con el historial de la garantía
   creadoEn           DateTime           @default(now())
   actualizadoEn      DateTime           @updatedAt
+  // REFERENCIAR AL PROVEEDOR
+    // Relación opcional con el proveedor
+  proveedorId        Int?               // ID del proveedor, opcional
+  proveedor          Proveedor?         @relation(fields: [proveedorId], references: [id], onDelete: SetNull)
 }
 
 model RegistroGarantia {
   id                Int                @id @default(autoincrement())
   garantiaId        Int
   garantia          Garantia           @relation(fields: [garantiaId], references: [id], onDelete: Cascade)
-  //USUARIO QUE RECIBE
+  // USUARIO QUE RECIBE
   usuarioId         Int?
   usuario           Usuario?            @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
-  //PROVEEDOR SI LO SELECCIONARÍAMOS
-  proveedorId       Int?               // Opcional en caso de envío a un proveedor
-  proveedor         Proveedor?         @relation(fields: [proveedorId], references: [id], onDelete: SetNull)
-  //OTROS
+  // OTROS
+  // REFERENCIA AL PRODUCTO REPARADO O REEMPLAZADO
+  productoId        Int
+  producto          Producto           @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  // USUARIO QUE RECIBE
   estado            EstadoGarantia     // Estado en este punto del registro
-  comentario        String?            // Comentario opcional sobre el estado o proceso
+  // comentario        String?            // Comentario opcional sobre el estado o proceso
+  conclusion        String?            // Conclusión de la garantía (ej. Reparado, Reemplazado)
+  accionesRealizadas String?           // Acciones realizadas (opcional)
   fechaRegistro     DateTime           @default(now())
+  // fechaFinalizacion DateTime?          // Fecha de finalización (opcional)
+  //REFERENCIAR AL PROVEEDOR
+    // Relación opcional con el proveedor
+  proveedorId        Int?               // ID del proveedor, opcional
+  proveedor          Proveedor?         @relation(fields: [proveedorId], references: [id], onDelete: SetNull)
 }
-
 enum EstadoGarantia {
   RECIBIDO           // Producto recibido en garantía
   ENVIADO_A_PROVEEDOR // Enviado a proveedor para reparación
   EN_REPARACION       // Producto en reparación
   REPARADO            // Reparación completada
+  REEMPLAZADO         //SE LE REEMPLAZARÁ EL PRODUCTO AL CLIENTE
   ENTREGADO_CLIENTE   // Producto devuelto al cliente
   CERRADO             // Caso cerrado
 }
@@ -424,6 +540,10 @@ model Venta {
   //IMEI
   imei                String?        
   @@unique([imei, id]) // Permite null en `imei` sin conflicto de unicidad 
+  //========>
+    // Relación con RegistroCaja
+  registroCajaId    Int?        // ID del turno de caja al que pertenece la venta
+  registroCaja      RegistroCaja? @relation(fields: [registroCajaId], references: [id], onDelete: SetNull)
 }
 
 model TransferenciaProducto {
@@ -493,6 +613,10 @@ model Proveedor {
   creadoEn        DateTime         @default(now())
   actualizadoEn   DateTime         @updatedAt
 
+  // RegistroGarantia RegistroGarantia[]
+  //REFERNCIA AL PRIMER TICKET DE GARANTIA
+  Garantia Garantia[]
+  //REFERNCIA AL registro final
   RegistroGarantia RegistroGarantia[]
 }
 

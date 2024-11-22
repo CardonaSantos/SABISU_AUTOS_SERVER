@@ -26,6 +26,11 @@ import { StockRemoveModule } from './stock-remove/stock-remove.module';
 import { ClientModule } from './client/client.module';
 import { WarrantyModule } from './warranty/warranty.module';
 import { TicketModule } from './ticket/ticket.module';
+import { VencimientosModule } from './vencimientos/vencimientos.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { ReportsModule } from './reports/reports.module';
+import { SucursalSaldoModule } from './sucursal-saldo/sucursal-saldo.module';
+import { CajaModule } from './caja/caja.module';
 
 @Module({
   imports: [
@@ -57,6 +62,11 @@ import { TicketModule } from './ticket/ticket.module';
     ClientModule,
     WarrantyModule,
     TicketModule,
+    VencimientosModule,
+    ScheduleModule.forRoot(),
+    ReportsModule,
+    SucursalSaldoModule,
+    CajaModule,
   ],
   controllers: [AppController],
   providers: [AppService],

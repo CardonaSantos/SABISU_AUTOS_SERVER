@@ -21,6 +21,7 @@ export class ClientService {
           dpi: createClientDto.dpi,
           telefono: createClientDto.telefono,
           direccion: createClientDto.direccion,
+          iPInternet: createClientDto.iPInternet,
         },
       });
 
@@ -46,6 +47,7 @@ export class ClientService {
           telefono: true,
           dpi: true,
           direccion: true,
+          iPInternet: true,
           actualizadoEn: true,
           _count: {
             select: {
@@ -66,6 +68,21 @@ export class ClientService {
     } catch (error) {
       console.log(error);
       throw new BadRequestException('Error al encontrar los clientes');
+    }
+  }
+
+  async findCustomersToWarranty() {
+    try {
+      const customers = await this.prisma.cliente.findMany({
+        orderBy: {
+          creadoEn: 'desc',
+        },
+      });
+
+      return customers;
+    } catch (error) {
+      console.log(error);
+      throw new InternalServerErrorException('Error al encontrar customers');
     }
   }
 
@@ -90,6 +107,7 @@ export class ClientService {
           telefono: updateClientDto.telefono,
           direccion: updateClientDto.direccion,
           dpi: updateClientDto.dpi,
+          iPInternet: updateClientDto.iPInternet,
         },
       });
 
