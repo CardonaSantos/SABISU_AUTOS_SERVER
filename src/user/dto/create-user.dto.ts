@@ -4,11 +4,15 @@ import {
   IsEmail,
   IsEnum,
   IsInt,
+  IsNumber,
   IsString,
   Min,
 } from 'class-validator';
 
 export class CreateUserDto {
+  @IsNumber()
+  id?: number;
+
   @IsString()
   nombre: string;
 
@@ -22,6 +26,10 @@ export class CreateUserDto {
   @Min(8)
   @IsString()
   contrasena: string;
+
+  @Min(8)
+  @IsString()
+  contrasenaConfirm?: string;
 
   @IsInt()
   sucursalId: number;

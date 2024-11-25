@@ -31,6 +31,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { ReportsModule } from './reports/reports.module';
 import { SucursalSaldoModule } from './sucursal-saldo/sucursal-saldo.module';
 import { CajaModule } from './caja/caja.module';
+import { SaleDeletedModule } from './sale-deleted/sale-deleted.module';
 
 @Module({
   imports: [
@@ -67,6 +68,7 @@ import { CajaModule } from './caja/caja.module';
     ReportsModule,
     SucursalSaldoModule,
     CajaModule,
+    SaleDeletedModule,
   ],
   controllers: [AppController],
   providers: [AppService],

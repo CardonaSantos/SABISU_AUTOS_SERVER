@@ -6,6 +6,8 @@ import {
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
+import * as bcrypt from 'bcryptjs';
+import { AdminUpdateUserDto } from './dto/AdminUpdateUserDto .dto';
 
 @Injectable()
 export class UserService {
@@ -116,6 +118,101 @@ export class UserService {
     }
   }
 
+  async updateUserAsAdmin(
+    adminId: number,
+    adminUpdateUserDto: AdminUpdateUserDto,
+  ) {
+    try {
+      const { userId, nuevaContrasena, adminPassword, ...dataToUpdate } =
+        adminUpdateUserDto;
+
+      // Verificar contraseña del administrador
+      const admin = await this.prisma.usuario.findUnique({
+        where: { id: adminId },
+        select: { contrasena: true },
+      });
+
+      if (!admin || !(await bcrypt.compare(adminPassword, admin.contrasena))) {
+        throw new BadRequestException(
+          'La contraseña del administrador no es válida',
+        );
+      }
+
+      // Si hay una nueva contraseña, generar el hash
+      let hashedPassword = null;
+      if (nuevaContrasena) {
+        const salt = await bcrypt.genSalt(10);
+        hashedPassword = await bcrypt.hash(nuevaContrasena, salt);
+      }
+
+      // Preparar los datos para actualizar
+      const updateData = {
+        ...dataToUpdate,
+        ...(hashedPassword && { contrasena: hashedPassword }),
+      };
+
+      // Actualizar el usuario
+      const updatedUser = await this.prisma.usuario.update({
+        where: { id: userId },
+        data: updateData,
+      });
+
+      return updatedUser;
+    } catch (error) {
+      console.error('Error al actualizar el usuario:', error);
+      throw new BadRequestException('Error al actualizar el usuario');
+    }
+  }
+
+  async updateMyUser(idUser: number, updateUserDto: UpdateUserDto) {
+    try {
+      const { contrasena, contrasenaConfirm, ...data } = updateUserDto;
+
+      console.log('Los datos son: ', contrasena, contrasenaConfirm, data);
+
+      let contrasenaHash;
+
+      if (contrasena && contrasenaConfirm) {
+        const currentUser = await this.prisma.usuario.findUnique({
+          where: { id: idUser },
+          select: { contrasena: true }, // Solo traemos el hash de la contraseña
+        });
+
+        if (!currentUser) {
+          throw new BadRequestException('Usuario no encontrado');
+        }
+
+        const isMatch = await bcrypt.compare(
+          contrasenaConfirm,
+          currentUser.contrasena,
+        );
+        if (!isMatch) {
+          throw new BadRequestException('La contraseña actual no es correcta');
+        }
+
+        const salt = await bcrypt.genSalt(10);
+        contrasenaHash = await bcrypt.hash(contrasena, salt);
+      }
+
+      const dataToUpdate = {
+        ...data,
+        ...(contrasenaHash && { contrasena: contrasenaHash }), // Solo agrega la contraseña si fue actualizada
+      };
+
+      const userToUpdate = await this.prisma.usuario.update({
+        where: { id: idUser },
+        data: dataToUpdate,
+      });
+
+      console.log('El usuario actualizado es: ', userToUpdate);
+
+      return userToUpdate;
+    } catch (error) {
+      console.error('Error al actualizar el usuario:', error);
+      throw new BadRequestException('Error al actualizar el usuario');
+    }
+  }
+
   async update(id: number, updateUserDto: UpdateUserDto) {
     try {
       const userToUpdate = await this.prisma.usuario.update({
@@ -148,6 +245,74 @@ export class UserService {
     } catch (error) {
       console.log(error);
       throw new InternalServerErrorException('Error al eliminar usuarios');
+    }
+  }
+
+  async findMyUser(id: number) {
+    try {
+      const myUser = await this.prisma.usuario.findUnique({
+        where: {
+          id,
+        },
+        select: {
+          id: true,
+          nombre: true,
+          activo: true,
+          correo: true,
+          rol: true,
+        },
+      });
+
+      return myUser;
+    } catch (error) {
+      console.log(error);
+      throw new BadRequestException('Error al conseguir usuario');
+    }
+  }
+
+  async findAllUsersWithSales() {
+    try {
+      const usersWithSales = await this.prisma.usuario.findMany({
+        orderBy: {
+          fecha_actualizacion: 'asc',
+        },
+        include: {
+          sucursal: {
+            select: {
+              id: true,
+              nombre: true,
+            },
+          },
+          RegistroCaja: {
+            include: {
+              ventas: {
+                select: {
+                  id: true, // Solo necesitamos el ID de la venta
+                },
+              },
+            },
+          },
+        },
+      });
+
+      // Procesar para obtener el total de ventas por usuario
+      const result = usersWithSales.map((user) => ({
+        id: user.id,
+        nombre: user.nombre,
+        correo: user.correo,
+        sucursal: user.sucursal,
+        rol: user.rol,
+        activo: user.activo,
+        totalVentas: user.RegistroCaja.reduce(
+          (acc, registro) => acc + registro.ventas.length,
+          0,
+        ),
+      }));
+
+      return result;
+    } catch (error) {
+      console.error('Error al obtener los usuarios con ventas:', error);
+      throw new Error('No se pudieron cargar los datos.');
     }
   }
 }

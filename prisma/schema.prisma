@@ -14,15 +14,35 @@ datasource db {
 }
 
 //============================>SALDOS Y OTROS
-// model SucursalSaldo {
-//   id                 Int         @id @default(autoincrement())
-//   sucursalId         Int         // Relación con la sucursal
-//   sucursal           Sucursal    @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
-//   saldoAcumulado     Float       @default(0) // Saldo acumulado de la sucursal
-//   totalIngresos      Float       @default(0) // Suma de todos los ingresos (ventas, depósitos)
-//   totalEgresos       Float       @default(0) // Suma de todos los egresos
-//   actualizadoEn      DateTime    @updatedAt
-// }
+
+model VentaEliminada {
+  id                 Int        @id @default(autoincrement())
+  usuarioId          Int        // ID del usuario que realizó la eliminación
+  usuario            Usuario    @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  motivo             String     // Motivo de la eliminación
+  totalVenta         Float      // Total de la venta
+  clienteId          Int?        // ID del usuario que realizó la eliminación
+  cliente            Cliente?    @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  fechaEliminacion   DateTime   @default(now()) // Fecha y hora de la eliminación
+  sucursalId         Int        // ID de la sucursal a la que pertenece la venta eliminada
+  sucursal           Sucursal   @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+
+
+  VentaEliminadaProducto VentaEliminadaProducto[] // Relación con los productos de la venta eliminada
+}
+
+
+model VentaEliminadaProducto {
+  id                 Int         @id @default(autoincrement())
+  ventaEliminadaId   Int         // Relación con VentaEliminada
+  ventaEliminada     VentaEliminada @relation(fields: [ventaEliminadaId], references: [id], onDelete: Cascade)
+  productoId         Int?         // Relación con Producto
+  producto           Producto?    @relation(fields: [productoId], references: [id], onDelete: SetNull) // Permite que el producto sea eliminado sin romper la relación
+  cantidad           Int         // Cantidad del producto en la venta
+  precioVenta        Float       // Precio al que se vendió el producto
+  creadoEn           DateTime    @default(now()) // Fecha de creación del registro
+}
+
 model SucursalSaldo {
   id                 Int         @id @default(autoincrement())
   sucursalId         Int         @unique // Cada sucursal tiene un único saldo
@@ -211,6 +231,8 @@ model Producto {
   Garantia Garantia[]
 
   RegistroGarantia RegistroGarantia[]
+
+  VentaEliminadaProducto VentaEliminadaProducto[]
 }
 
 
@@ -358,6 +380,8 @@ model Sucursal {
   Egreso Egreso[]
   //UNICA TABLA
   SucursalSaldo SucursalSaldo?
+
+  VentaEliminada VentaEliminada[]
 }
 
 model EntregaStock {
@@ -420,6 +444,11 @@ model Usuario {
   Deposito Deposito[]
 
   Egreso Egreso[]
+
+  fecha_creacion        DateTime           @default(now()) // Aplica un valor por defecto a filas nuevas y existentes
+  fecha_actualizacion DateTime @default(now()) // Esto asigna automáticamente la fecha actual.
+
+  VentaEliminada VentaEliminada[]
 }
 
 model Cliente {
@@ -442,6 +471,9 @@ model Cliente {
   //PARA LAS GARANTÍAS
   Garantia Garantia[]
   iPInternet String? //IP PARA ENCONTRAR EL PAGO DE INTERNET
+    // Nuevas propiedades de fecha
+
+  VentaEliminada VentaEliminada[]
 }
 
 
@@ -540,7 +572,6 @@ model Venta {
   //IMEI
   imei                String?        
   @@unique([imei, id]) // Permite null en `imei` sin conflicto de unicidad 
-  //========>
     // Relación con RegistroCaja
   registroCajaId    Int?        // ID del turno de caja al que pertenece la venta
   registroCaja      RegistroCaja? @relation(fields: [registroCajaId], references: [id], onDelete: SetNull)
@@ -582,10 +613,10 @@ model TransferenciaProducto {
 model VentaProducto {
   id              Int         @id @default(autoincrement())
   ventaId         Int         // Relación con la venta
-  productoId      Int         // Relación con el producto
+  productoId      Int?         // Relación con el producto
   cantidad        Int         // Cantidad vendida del producto
   venta           Venta       @relation(fields: [ventaId], references: [id], onDelete: Cascade)
-  producto        Producto    @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  producto        Producto?    @relation(fields: [productoId], references: [id], onDelete: SetNull)
   creadoEn        DateTime    @default(now())  // Fecha de creación del registro
   //NUEVA PROPIEDAD QUE REGISTRA EL PRECIO AL QUE SE VENDIÓ EL PRODUCTO, SUSTITUTO DE DE PRECIOvENTA EN TABLA PRODUCTO
   precioVenta     Float       // Precio de venta del producto en el momento de la venta

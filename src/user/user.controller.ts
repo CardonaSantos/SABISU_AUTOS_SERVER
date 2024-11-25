@@ -11,6 +11,7 @@ import {
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { AdminUpdateUserDto } from './dto/AdminUpdateUserDto .dto';
 
 @Controller('user')
 export class UserController {
@@ -31,9 +32,35 @@ export class UserController {
     return await this.userService.findAllUserWithNot();
   }
 
+  @Get('/fin-my-user/:id')
+  async findMyUser(@Param('id', ParseIntPipe) id: number) {
+    return await this.userService.findMyUser(id);
+  }
+
+  @Get('/fin-all-users')
+  async findAllUsers() {
+    return await this.userService.findAllUsersWithSales();
+  }
+
   @Get(':id')
   async findOne(@Param('id', ParseIntPipe) id: number) {
     return await this.userService.findOne(+id);
+  }
+
+  @Patch('/update-user/as-admin/:id')
+  async updateUserAsAdmin(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() adminUpdateUserDto: AdminUpdateUserDto,
+  ) {
+    return await this.userService.updateUserAsAdmin(id, adminUpdateUserDto);
+  }
+
+  @Patch('/update-user/:id')
+  async updateMyUser(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateUserDto: UpdateUserDto,
+  ) {
+    return await this.userService.updateMyUser(id, updateUserDto);
   }
 
   @Patch(':id')

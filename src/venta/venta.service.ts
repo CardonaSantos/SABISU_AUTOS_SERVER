@@ -260,6 +260,32 @@ export class VentaService {
     }
   }
 
+  async findAllSaleSucursal(id: number) {
+    try {
+      const ventas = await this.prisma.venta.findMany({
+        where: {
+          sucursalId: id,
+        },
+        include: {
+          cliente: true,
+          metodoPago: true,
+          productos: {
+            include: {
+              producto: true,
+            },
+          },
+        },
+        orderBy: {
+          fechaVenta: 'desc',
+        },
+      });
+      return ventas;
+    } catch (error) {
+      console.error(error);
+      throw new InternalServerErrorException('Error al obtener las ventas');
+    }
+  }
+
   async findOneSale(id: number) {
     try {
       const ventas = await this.prisma.venta.findUnique({
