@@ -32,6 +32,7 @@ import { ReportsModule } from './reports/reports.module';
 import { SucursalSaldoModule } from './sucursal-saldo/sucursal-saldo.module';
 import { CajaModule } from './caja/caja.module';
 import { SaleDeletedModule } from './sale-deleted/sale-deleted.module';
+import { CuotasModule } from './cuotas/cuotas.module';
 
 @Module({
   imports: [
@@ -69,6 +70,7 @@ import { SaleDeletedModule } from './sale-deleted/sale-deleted.module';
     SucursalSaldoModule,
     CajaModule,
     SaleDeletedModule,
+    CuotasModule,
   ],
   controllers: [AppController],
   providers: [AppService],

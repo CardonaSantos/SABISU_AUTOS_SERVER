@@ -15,6 +15,72 @@ datasource db {
 
 //============================>SALDOS Y OTROS
 
+model VentaCuota {
+  id                  Int          @id @default(autoincrement())
+  clienteId           Int          // Cliente relacionado
+  cliente             Cliente      @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  usuarioId           Int          // Usuario que autorizó la venta
+  usuario             Usuario      @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  sucursalId          Int          // Sucursal donde se realizó la venta
+  sucursal            Sucursal     @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+  totalVenta          Float        // Monto total de la venta
+  cuotaInicial        Float        // Monto inicial pagado
+  cuotasTotales       Int          // Número total de cuotas
+  fechaInicio         DateTime     @default(now()) // Fecha en que se inició la venta a crédito
+  estado              EstadoCuota  @default(ACTIVA) // Enum para manejar el estado de la venta
+  cuotas              Cuota[]      // Relación con las cuotas individuales
+  productos           VentaProducto[] // Relación con los productos vendidos
+  creadoEn            DateTime     @default(now())
+  actualizadoEn       DateTime     @updatedAt
+  dpi String
+  testigos Json
+  fechaContrato       DateTime     @default(now()) //
+  montoVenta          Float
+  garantiaMeses       Int
+  totalPagado         Float        @default(0)      // Total pagado hasta el momento (se actualizará con cada pago)
+  diasEntrePagos      Int          @default(0)  
+  interes             Int          @default(0)  // Porcentaje de interés aplicado al crédito (por ejemplo, 15 para 15%)
+}
+
+model Cuota {
+  id                  Int          @id @default(autoincrement())
+  ventaCuotaId        Int          // Relación con la venta a cuotas
+  ventaCuota          VentaCuota   @relation(fields: [ventaCuotaId], references: [id], onDelete: Cascade)
+  monto               Float        // Monto de la cuota
+  fechaVencimiento    DateTime?     // Fecha en que debe realizarse el pago
+  fechaPago           DateTime?    @default(now())
+  estado              EstadoPago   @default(PENDIENTE) // Estado de la cuota
+  usuarioId           Int?         // Usuario que recibió el pago (null si no se ha pagado)
+  usuario             Usuario?     @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+  creadoEn            DateTime     @default(now())
+  actualizadoEn       DateTime     @updatedAt
+}
+
+model PlantillaComprobante {
+  id          Int        @id @default(autoincrement())
+  nombre      String     // Nombre o tipo de plantilla (Ej. "Plantilla Cuota Teléfonos")
+  texto       String     // Texto enriquecido de la plantilla (puede ser un string largo o HTML)
+  sucursalId  Int?
+  sucursal    Sucursal?  @relation(fields: [sucursalId], references: [id], onDelete: SetNull)
+  creadoEn    DateTime   @default(now())
+  actualizadoEn DateTime @updatedAt
+}
+
+
+enum EstadoPago {
+  PENDIENTE
+  PAGADA
+  ATRASADA
+}
+
+enum EstadoCuota {
+  ACTIVA
+  COMPLETADA
+  CANCELADA
+}
+
+//=============================================>
+
 model VentaEliminada {
   id                 Int        @id @default(autoincrement())
   usuarioId          Int        // ID del usuario que realizó la eliminación
@@ -27,10 +93,8 @@ model VentaEliminada {
   sucursalId         Int        // ID de la sucursal a la que pertenece la venta eliminada
   sucursal           Sucursal   @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
 
-
   VentaEliminadaProducto VentaEliminadaProducto[] // Relación con los productos de la venta eliminada
 }
-
 
 model VentaEliminadaProducto {
   id                 Int         @id @default(autoincrement())
@@ -366,22 +430,19 @@ model Sucursal {
   Venta Venta[]
   TransferenciaProducto TransferenciaProducto[] @relation("SucursalOrigen")
   TransferenciaProductoDestino TransferenciaProducto[] @relation("SucursalDestino") // NUEVA RELACIÓN
-  //NUEVO
   EntregaStock EntregaStock[]
-  //NUEVO SOLICITUD TRANSFERENCIA
-  // Relaciones para solicitudes de transferencia
   solicitudesOrigen    SolicitudTransferenciaProducto[] @relation("SucursalOrigenSolicitud")
   solicitudesDestino   SolicitudTransferenciaProducto[] @relation("SucursalDestinoSolicitud")
   EliminacionStock EliminacionStock[]
   RegistroCaja RegistroCaja[]
-  //LOS DEPOSITOVS D ELA SUCURSAL
   Deposito Deposito[]
-  //LOS EGRESOS DE LA SUCURSAL
   Egreso Egreso[]
-  //UNICA TABLA
   SucursalSaldo SucursalSaldo?
-
   VentaEliminada VentaEliminada[]
+
+  VentaCuota VentaCuota[]
+
+  PlantillaComprobante PlantillaComprobante[]
 }
 
 model EntregaStock {
@@ -412,49 +473,33 @@ model Usuario {
   PrecioProducto        PrecioProducto[]
   solicitudesPrecio     SolicitudPrecio[]  @relation("SolicitadoPor")
   solicitudesAprobadas  SolicitudPrecio[]  @relation("AprobadoPor")
-
   notificacionesEnviadas  Notificacion[] @relation("Remitente")
   notificacionesRecibidas Notificacion[] @relation("Destinatario")
-
   notificacionesUsuarios  NotificacionesUsuarios[]  // Relación con tabla intermedia
-  //NUEVAS PARA SOLICITAR TRANSFERENCIA
-  // Relaciones para las solicitudes de transferencia de productos
-  // Relaciones para las solicitudes de transferencia de productos
   solicitudesEnviadas      SolicitudTransferenciaProducto[] @relation("UsuarioSolicitante")
   solicitudesAprobadasTransferencia SolicitudTransferenciaProducto[] @relation("AdministradorAprobador") // Renombrada para especificidad
-
-  //RECIOS QUE EL WN MODIFICÓ
   HistorialPrecioCosto HistorialPrecioCosto[]
-
-//REGISTROS DE AJUSTES DE STOCKS
   AjusteStock AjusteStock[]
-
   EliminacionProducto EliminacionProducto[]
-
   EliminacionCliente EliminacionCliente[]
-
   EliminacionStock EliminacionStock[]
-
   RegistroGarantia RegistroGarantia[]
-
   Garantia Garantia[]
-
   RegistroCaja RegistroCaja[]
-
   Deposito Deposito[]
-
   Egreso Egreso[]
-
   fecha_creacion        DateTime           @default(now()) // Aplica un valor por defecto a filas nuevas y existentes
   fecha_actualizacion DateTime @default(now()) // Esto asigna automáticamente la fecha actual.
-
   VentaEliminada VentaEliminada[]
+
+  VentaCuota VentaCuota[]
+
+  Cuota Cuota[]
 }
 
 model Cliente {
   id              Int          @id @default(autoincrement())
   nombre          String
-  // correo          String?       
   telefono        String?
   direccion       String?
   compras         Venta[]
@@ -474,6 +519,7 @@ model Cliente {
     // Nuevas propiedades de fecha
 
   VentaEliminada VentaEliminada[]
+  VentaCuota VentaCuota[]
 }
 
 
@@ -562,17 +608,13 @@ model Venta {
   productos       VentaProducto[]//ENVIAR
   totalVenta      Float       // Total de la venta//ENVIAR
   metodoPago      Pago?       // Cambia esto para permitir null
-  //OTROS
   sucursalId      Int         // NUEVO: Relación con la sucursal que hizo la venta
   sucursal        Sucursal    @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
-  //OOTROS PARA CF
   nombreClienteFinal String?
   telefonoClienteFinal String?
   direccionClienteFinal String?
-  //IMEI
   imei                String?        
   @@unique([imei, id]) // Permite null en `imei` sin conflicto de unicidad 
-    // Relación con RegistroCaja
   registroCajaId    Int?        // ID del turno de caja al que pertenece la venta
   registroCaja      RegistroCaja? @relation(fields: [registroCajaId], references: [id], onDelete: SetNull)
 }
@@ -620,6 +662,8 @@ model VentaProducto {
   creadoEn        DateTime    @default(now())  // Fecha de creación del registro
   //NUEVA PROPIEDAD QUE REGISTRA EL PRECIO AL QUE SE VENDIÓ EL PRODUCTO, SUSTITUTO DE DE PRECIOvENTA EN TABLA PRODUCTO
   precioVenta     Float       // Precio de venta del producto en el momento de la venta
+
+  VentaCuota VentaCuota[]
 }
 
 model Proveedor {
@@ -693,6 +737,7 @@ enum MetodoPago {
   TRANSFERENCIA
   PAYPAL
   OTRO
+  CUTOAS
 }
 
 enum TipoPrecio {

@@ -73,7 +73,7 @@ export class VencimientosService {
           const registroVencimiento = await this.prisma.vencimiento.create({
             data: {
               fechaVencimiento: stock.fechaVencimiento,
-              descripcion: `El producto ${producto.nombre} tiene una instancia de Stock que vence el día ${stock.fechaVencimiento}.`,
+              descripcion: `El producto ${producto.nombre} tiene una instancia de Stock que vence el día ${formatFecha(stock.fechaVencimiento)}.`,
 
               stockId: stock.id,
               estado: 'PENDIENTE',

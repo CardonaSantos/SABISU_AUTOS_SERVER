@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Cuota" ALTER COLUMN "fechaVencimiento" DROP NOT NULL,
+ALTER COLUMN "fechaPago" SET DEFAULT CURRENT_TIMESTAMP;

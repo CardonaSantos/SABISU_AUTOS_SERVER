@@ -143,4 +143,25 @@ export class ClientService {
       throw new BadRequestException('Error al intentar eliminar el cliente');
     }
   }
+
+  async getClientToCredit() {
+    try {
+      const customers = await this.prisma.cliente.findMany({
+        select: {
+          id: true,
+          nombre: true,
+          telefono: true,
+          dpi: true,
+          creadoEn: true,
+        },
+        orderBy: {
+          creadoEn: 'desc',
+        },
+      });
+      return customers;
+    } catch (error) {
+      console.log(error);
+      throw new BadRequestException('Error al conseguir customers');
+    }
+  }
 }

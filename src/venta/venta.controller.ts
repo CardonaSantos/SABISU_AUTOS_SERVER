@@ -28,6 +28,13 @@ export class VentaController {
     return await this.ventaService.findAll();
   }
 
+  @Get('/find-customer-sales/:customerId')
+  async findAllSaleCustomer(
+    @Param('customerId', ParseIntPipe) customerId: number,
+  ) {
+    return await this.ventaService.findAllSaleCustomer(customerId);
+  }
+
   @Get('/find-my-sucursal-sales/:id')
   async findAllSaleSucursal(@Param('id', ParseIntPipe) id: number) {
     return await this.ventaService.findAllSaleSucursal(id);

@@ -408,4 +408,31 @@ export class VentaService {
       throw new InternalServerErrorException('Error al eliminar la venta');
     }
   }
+
+  //ENCONTRAR SOLO VENTAS DE UN SOLO CLIENTE
+  async findAllSaleCustomer(customerId: number) {
+    try {
+      const ventas = await this.prisma.venta.findMany({
+        where: {
+          clienteId: customerId,
+        },
+        include: {
+          cliente: true,
+          metodoPago: true,
+          productos: {
+            include: {
+              producto: true,
+            },
+          },
+        },
+        orderBy: {
+          fechaVenta: 'desc',
+        },
+      });
+      return ventas;
+    } catch (error) {
+      console.error(error);
+      throw new InternalServerErrorException('Error al obtener las ventas');
+    }
+  }
 }

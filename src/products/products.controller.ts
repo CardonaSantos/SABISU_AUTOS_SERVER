@@ -50,6 +50,11 @@ export class ProductsController {
     return await this.productsService.productToEdit(id);
   }
 
+  @Get('/products-to-credit')
+  async productToCredit() {
+    return await this.productsService.productToCredit();
+  }
+
   @Get('/historial-price')
   async productHistorialPrecios() {
     return await this.productsService.productHistorialPrecios();

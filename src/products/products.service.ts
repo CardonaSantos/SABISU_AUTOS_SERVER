@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   InternalServerErrorException,
   MethodNotAllowedException,
@@ -387,6 +388,24 @@ export class ProductsService {
     } catch (error) {
       console.log(error);
       throw new InternalServerErrorException('Error al eliminar los productos');
+    }
+  }
+
+  async productToCredit() {
+    try {
+      const products = await this.prisma.producto.findMany({
+        select: {
+          id: true,
+          nombre: true,
+          codigoProducto: true,
+        },
+      });
+      return products;
+    } catch (error) {
+      console.log(error);
+      throw new BadRequestException(
+        'Error al conseguir datos de los productos',
+      );
     }
   }
 }

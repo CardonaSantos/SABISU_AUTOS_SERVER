@@ -36,6 +36,12 @@ export class ClientController {
     return this.clientService.findCustomersToWarranty();
   }
 
+  //Conseguir clientes para creditos
+  @Get('/get-clients')
+  getClientToCredit() {
+    return this.clientService.getClientToCredit();
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.clientService.findOne(+id);
