@@ -16,6 +16,7 @@ import { UpdateVentaCuotaDto } from './dto/update-cuota.dto';
 import { CreateVentaCuotaDto } from './dto/create-ventacuota.dto';
 import { CreatePlantillaComprobanteDto } from './dto/plantilla-comprobante.dt';
 import { CuotaDto } from './dto/registerNewPay';
+import { CloseCreditDTO } from './dto/close-credit.dto';
 
 @Controller('cuotas')
 export class CuotasController {
@@ -87,6 +88,14 @@ export class CuotasController {
   @Delete('/delete-all-plantillas')
   deleteAllPlantillas() {
     return this.cuotasService.deleteAllPlantillas();
+  }
+
+  @Patch('/close-credit-regist/:id')
+  closeCreditRegist(
+    @Body() closeCreditDto: CloseCreditDTO,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.cuotasService.closeCreditRegist(id, closeCreditDto);
   }
 
   @Patch('/update-plantilla/:id')

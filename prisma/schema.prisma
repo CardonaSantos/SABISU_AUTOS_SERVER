@@ -40,6 +40,7 @@ model VentaCuota {
   totalPagado         Float        @default(0)      // Total pagado hasta el momento (se actualizará con cada pago)
   diasEntrePagos      Int          @default(0)  
   interes             Int          @default(0)  // Porcentaje de interés aplicado al crédito (por ejemplo, 15 para 15%)
+  comentario String?
 }
 
 model Cuota {
@@ -54,6 +55,7 @@ model Cuota {
   usuario             Usuario?     @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
   creadoEn            DateTime     @default(now())
   actualizadoEn       DateTime     @updatedAt
+  comentario String?
 }
 
 model PlantillaComprobante {

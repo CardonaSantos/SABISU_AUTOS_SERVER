@@ -5,6 +5,7 @@ import { UpdateVentaCuotaDto } from './dto/update-cuota.dto';
 import { CreateVentaCuotaDto } from './dto/create-ventacuota.dto';
 import { CreatePlantillaComprobanteDto } from './dto/plantilla-comprobante.dt';
 import { CuotaDto } from './dto/registerNewPay';
+import { CloseCreditDTO } from './dto/close-credit.dto';
 
 @Injectable()
 export class CuotasService {
@@ -140,6 +141,18 @@ export class CuotasService {
           monto: createCuotaDto.monto,
           estado: createCuotaDto.estado,
           usuarioId: createCuotaDto.usuarioId,
+          comentario: createCuotaDto.comentario,
+        },
+      });
+
+      await this.prisma.ventaCuota.update({
+        where: {
+          id: createCuotaDto.ventaCuotaId,
+        },
+        data: {
+          totalPagado: {
+            increment: createCuotaDto.monto,
+          },
         },
       });
 
@@ -233,6 +246,8 @@ export class CuotasService {
             select: {
               id: true,
               nombre: true,
+              telefono: true,
+              direccion: true,
             },
           },
           productos: {
@@ -260,6 +275,22 @@ export class CuotasService {
             select: {
               id: true,
               nombre: true,
+            },
+          },
+          cuotas: {
+            select: {
+              id: true,
+              creadoEn: true,
+              estado: true,
+              fechaPago: true,
+              monto: true,
+              comentario: true,
+              usuario: {
+                select: {
+                  id: true,
+                  nombre: true,
+                },
+              },
             },
           },
 
@@ -409,6 +440,24 @@ export class CuotasService {
     } catch (error) {
       console.log(error);
       throw new BadRequestException('Error al actualizar registro');
+    }
+  }
+
+  async closeCreditRegist(id: number, closeCreditDto: CloseCreditDTO) {
+    try {
+      const creditToClose = await this.prisma.ventaCuota.update({
+        where: {
+          id,
+        },
+        data: {
+          estado: closeCreditDto.estado,
+          comentario: closeCreditDto.comentario,
+        },
+      });
+      return creditToClose;
+    } catch (error) {
+      console.log(error);
+      throw new BadRequestException('Error al actualizar y cerrar credito');
     }
   }
 }

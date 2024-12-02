@@ -44,4 +44,7 @@ export class CuotaDto {
   @IsDate()
   @Type(() => Date)
   actualizadoEn?: Date; // Fecha de última actualización (opcional)
+
+  @IsOptional()
+  comentario?: string;
 }

@@ -66,4 +66,7 @@ export class CreateVentaCuotaDto {
   @IsInt()
   @IsOptional()
   garantiaMeses?: number;
+
+  @IsOptional()
+  comentario?: string;
 }
