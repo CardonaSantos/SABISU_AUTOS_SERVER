@@ -138,6 +138,9 @@ export class SaleDeletedService {
             select: {
               id: true,
               nombre: true,
+              telefono: true,
+              dpi: true,
+              direccion: true,
             },
           },
           VentaEliminadaProducto: {

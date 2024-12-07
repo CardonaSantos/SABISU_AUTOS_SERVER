@@ -33,6 +33,7 @@ import { SucursalSaldoModule } from './sucursal-saldo/sucursal-saldo.module';
 import { CajaModule } from './caja/caja.module';
 import { SaleDeletedModule } from './sale-deleted/sale-deleted.module';
 import { CuotasModule } from './cuotas/cuotas.module';
+import { RepairModule } from './repair/repair.module';
 
 @Module({
   imports: [
@@ -71,6 +72,7 @@ import { CuotasModule } from './cuotas/cuotas.module';
     CajaModule,
     SaleDeletedModule,
     CuotasModule,
+    RepairModule,
   ],
   controllers: [AppController],
   providers: [AppService],

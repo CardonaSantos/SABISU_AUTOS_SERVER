@@ -116,7 +116,7 @@ export class SucursalesService {
           nombre: updateSucursaleDto.nombre,
           direccion: updateSucursaleDto.direccion,
           telefono: updateSucursaleDto.telefono,
-          // tipoSucursal: updateSucursaleDto.tipoSucursal,
+          pbx: updateSucursaleDto.pbx,
         },
       });
       return sucursalUpdate;

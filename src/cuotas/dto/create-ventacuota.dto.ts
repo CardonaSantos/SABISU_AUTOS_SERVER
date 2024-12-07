@@ -35,6 +35,9 @@ export class CreateVentaCuotaDto {
   @IsNumber()
   cuotaInicial: number;
 
+  @IsNumber()
+  montoTotalConInteres: number;
+
   @IsInt()
   cuotasTotales: number;
 

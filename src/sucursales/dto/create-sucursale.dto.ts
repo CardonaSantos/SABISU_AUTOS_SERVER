@@ -11,6 +11,10 @@ export class CreateSucursaleDto {
   @IsString()
   nombre: string;
 
+  @IsString()
+  @IsOptional()
+  pbx?: string;
+
   @IsEnum(TipoSucursal)
   tipoSucursal: TipoSucursal;
 

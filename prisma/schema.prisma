@@ -13,6 +13,80 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+
+
+
+model Reparacion {
+  id                 Int                @id @default(autoincrement())
+  usuarioId          Int                // ID del usuario que atendió
+  usuario            Usuario            @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  sucursalId         Int                // ID de la sucursal donde se realiza la reparación
+  sucursal           Sucursal           @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+
+  clienteId          Int                // Cliente asociado a la reparación
+  cliente            Cliente            @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  productoId         Int?               // Producto del sistema (opcional)
+  producto           Producto?          @relation(fields: [productoId], references: [id], onDelete: SetNull)
+
+  productoExterno    String?            // Nombre o descripción del producto externo
+
+  problemas          String             // Descripción de los problemas reportados
+  observaciones      String?            // Observaciones adicionales (ej. accesorios entregados)
+  
+  fechaRecibido      DateTime           @default(now()) // Fecha en que se recibió el producto
+  fechaEntregado     DateTime?          // Fecha de entrega del producto reparado
+  estado             EstadoReparacion   @default(PENDIENTE) // Estado actual de la reparación
+
+  registros          RegistroReparacion[] // Historial de acciones realizadas sobre la reparación
+
+  hojaSolucion       String?            // Detalles finales de la solución
+  creadoEn           DateTime           @default(now()) // Fecha de creación
+  actualizadoEn      DateTime           @updatedAt      // Última actualización
+}
+
+model RegistroReparacion {
+  id                 Int                @id @default(autoincrement())
+  reparacionId       Int                // Relación con la reparación
+  reparacion         Reparacion         @relation(fields: [reparacionId], references: [id], onDelete: Cascade)
+
+  usuarioId          Int                // Usuario que realizó la acción
+  usuario            Usuario            @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  estado             EstadoReparacion   // Estado de la reparación al momento del registro
+  accionesRealizadas String             // Descripción de las acciones realizadas (opcional)
+  fechaRegistro      DateTime           @default(now()) // Fecha del registro
+  comentarioFinal    String?            // Comentario final sobre la reparación
+
+  montoPagado Int?
+}
+
+enum EstadoReparacion {
+  RECIBIDO
+  PENDIENTE       // El producto está registrado pero la reparación no ha comenzado
+  EN_PROCESO      // Reparación activa
+  ESPERANDO_PIEZAS // Reparación pausada por falta de piezas
+  REPARADO        // Reparación finalizada, listo para entrega
+  ENTREGADO       // Reparación completada y producto entregado al cliente
+  CANCELADO       // Reparación cancelada
+  NO_REPARABLE    // Producto no reparable tras diagnóstico
+  FINALIZADO
+}
+
+
+
+// model Comprobante {
+//   id                 Int       @id @default(autoincrement())
+//   reparacionId       Int       @unique // Relación con la reparación
+//   reparacion         Reparacion @relation(fields: [reparacionId], references: [id], onDelete: Cascade)
+//   detalles           Json      // Detalles del comprobante (puede ser un JSON para flexibilidad)
+//   creadoEn           DateTime  @default(now()) // Fecha de generación
+// }
+
+
+
+
 //============================>SALDOS Y OTROS
 
 model VentaCuota {
@@ -29,7 +103,7 @@ model VentaCuota {
   fechaInicio         DateTime     @default(now()) // Fecha en que se inició la venta a crédito
   estado              EstadoCuota  @default(ACTIVA) // Enum para manejar el estado de la venta
   cuotas              Cuota[]      // Relación con las cuotas individuales
-  productos           VentaProducto[] // Relación con los productos vendidos
+  // productos           VentaProducto[] // Relación con los productos vendidos
   creadoEn            DateTime     @default(now())
   actualizadoEn       DateTime     @updatedAt
   dpi String
@@ -41,6 +115,11 @@ model VentaCuota {
   diasEntrePagos      Int          @default(0)  
   interes             Int          @default(0)  // Porcentaje de interés aplicado al crédito (por ejemplo, 15 para 15%)
   comentario String?
+  //
+  // Relación directa con la venta original
+  ventaId             Int?         @unique
+  venta               Venta?       @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+  montoTotalConInteres Int?
 }
 
 model Cuota {
@@ -113,7 +192,7 @@ model SucursalSaldo {
   id                 Int         @id @default(autoincrement())
   sucursalId         Int         @unique // Cada sucursal tiene un único saldo
   sucursal           Sucursal    @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
-  saldoAcumulado     Float       @default(0) // Saldo acumulado de la sucursal
+  saldoAcumulado     Float       @default(0) // Saldo acumulado de la sucursal PUEDE DISMINUIR-INCREMENTAR
   totalIngresos      Float       @default(0) // Suma de todos los ingresos (ventas, depósitos)
   totalEgresos       Float       @default(0) // Suma de todos los egresos
   actualizadoEn      DateTime    @updatedAt
@@ -299,6 +378,8 @@ model Producto {
   RegistroGarantia RegistroGarantia[]
 
   VentaEliminadaProducto VentaEliminadaProducto[]
+
+  Reparacion Reparacion[]
 }
 
 
@@ -422,7 +503,7 @@ model Sucursal {
   nombre          String      // Nombre de la sucursal
   direccion       String?     // Dirección física de la sucursal
   telefono        String?     // Teléfono de contacto
-  pxb             String?
+  pbx             String?
   productos       Stock[]     // Relación con el stock de productos de la sucursal
   usuarios        Usuario[]   // Relación con los empleados de la sucursal
   creadoEn        DateTime    @default(now())
@@ -445,6 +526,8 @@ model Sucursal {
   VentaCuota VentaCuota[]
 
   PlantillaComprobante PlantillaComprobante[]
+
+  Reparacion Reparacion[]
 }
 
 model EntregaStock {
@@ -497,6 +580,10 @@ model Usuario {
   VentaCuota VentaCuota[]
 
   Cuota Cuota[]
+
+  Reparacion Reparacion[]
+
+  RegistroReparacion RegistroReparacion[]
 }
 
 model Cliente {
@@ -522,6 +609,7 @@ model Cliente {
 
   VentaEliminada VentaEliminada[]
   VentaCuota VentaCuota[]
+  Reparacion Reparacion[]
 }
 
 
@@ -619,6 +707,9 @@ model Venta {
   @@unique([imei, id]) // Permite null en `imei` sin conflicto de unicidad 
   registroCajaId    Int?        // ID del turno de caja al que pertenece la venta
   registroCaja      RegistroCaja? @relation(fields: [registroCajaId], references: [id], onDelete: SetNull)
+  
+  // Relación opcional con una VentaCuota
+  ventaCuota          VentaCuota?
 }
 
 model TransferenciaProducto {
@@ -664,8 +755,7 @@ model VentaProducto {
   creadoEn        DateTime    @default(now())  // Fecha de creación del registro
   //NUEVA PROPIEDAD QUE REGISTRA EL PRECIO AL QUE SE VENDIÓ EL PRODUCTO, SUSTITUTO DE DE PRECIOvENTA EN TABLA PRODUCTO
   precioVenta     Float       // Precio de venta del producto en el momento de la venta
-
-  VentaCuota VentaCuota[]
+  // VentaCuota VentaCuota[]
 }
 
 model Proveedor {

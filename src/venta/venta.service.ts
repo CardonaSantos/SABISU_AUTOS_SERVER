@@ -302,7 +302,7 @@ export class VentaService {
               nombre: true,
               id: true,
               telefono: true,
-              pxb: true,
+              pbx: true,
             },
           },
           productos: {

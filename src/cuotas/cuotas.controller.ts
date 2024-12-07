@@ -70,6 +70,12 @@ export class CuotasController {
   }
 
   //UNA CUOTA
+  @Get('/get/comprobante/cuota/:id')
+  getComprobanteCuota(@Param('id', ParseIntPipe) id: number) {
+    return this.cuotasService.getComprobanteCuota(id);
+  }
+
+  //UNA CUOTA
   @Get('/get/cuota/:id')
   getCuota(@Param('id', ParseIntPipe) id: number) {
     return this.cuotasService.getCuota(id);
@@ -107,5 +113,10 @@ export class CuotasController {
       id,
       createPlantillaComprobanteDto,
     );
+  }
+
+  @Delete('/delete-all-creditos-prueba')
+  deleteAllCreditosPrueba() {
+    return this.cuotasService.deleteAllCreditosPrueba();
   }
 }
