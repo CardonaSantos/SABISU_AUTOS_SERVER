@@ -529,6 +529,8 @@ export class CuotasService {
     diasEntrePagos: number;
     interes: number;
     totalVenta: number;
+    montoTotalConInteres: number;
+    totalPagado: number;
 
     //-----------------
     // id, // Código único del contrato
@@ -645,6 +647,8 @@ export class CuotasService {
         diasEntrePagos: cuota.diasEntrePagos,
         interes: cuota.interes,
         totalVenta: cuota.totalVenta,
+        montoTotalConInteres: cuota.montoTotalConInteres,
+        totalPagado: cuota.totalPagado,
       };
     } catch (error) {
       console.error(error);
