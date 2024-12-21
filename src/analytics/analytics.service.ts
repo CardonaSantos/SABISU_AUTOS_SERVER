@@ -231,32 +231,33 @@ export class AnalyticsService {
     }
   }
 
-  async getVentasDia(idSucursal: number) {
+  async getVentasDia(idSucursal: number): Promise<number> {
     const fechaActual = new Date();
 
-    // Calcular el inicio y fin del día actual (desde las 00:00 hasta las 23:59)
+    // Asegurar que los rangos se calculan en UTC
     const inicioDia = new Date(
-      fechaActual.getFullYear(),
-      fechaActual.getMonth(),
-      fechaActual.getDate(),
-      0,
-      0,
-      0,
+      Date.UTC(
+        fechaActual.getUTCFullYear(),
+        fechaActual.getUTCMonth(),
+        fechaActual.getUTCDate(),
+        0,
+        0,
+        0,
+      ),
     );
     const finDia = new Date(
-      fechaActual.getFullYear(),
-      fechaActual.getMonth(),
-      fechaActual.getDate(),
-      23,
-      59,
-      59,
+      Date.UTC(
+        fechaActual.getUTCFullYear(),
+        fechaActual.getUTCMonth(),
+        fechaActual.getUTCDate(),
+        23,
+        59,
+        59,
+      ),
     );
 
     try {
-      let montoTotalDia = 0;
-
-      // Consultar las ventas del día actual
-      const ventasTotalMonto = await this.prisma.venta.findMany({
+      const ventasTotalMonto = await this.prisma.venta.aggregate({
         where: {
           sucursalId: idSucursal,
           fechaVenta: {
@@ -264,18 +265,14 @@ export class AnalyticsService {
             lte: finDia,
           },
         },
-        select: {
+        _sum: {
           totalVenta: true,
         },
       });
 
-      ventasTotalMonto.forEach((venta) => {
-        montoTotalDia += venta.totalVenta;
-      });
-
-      return montoTotalDia; // Devolver el monto total del día
+      return ventasTotalMonto._sum.totalVenta || 0; // Si no hay ventas, retornar 0
     } catch (error) {
-      console.log(error);
+      console.error('Error al calcular las ventas del día:', error);
       throw new InternalServerErrorException(
         'Error al calcular el monto total de ventas del día',
       );
