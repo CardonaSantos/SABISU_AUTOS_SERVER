@@ -236,24 +236,20 @@ export class AnalyticsService {
 
     // Asegurar que los rangos se calculan en UTC
     const inicioDia = new Date(
-      Date.UTC(
-        fechaActual.getUTCFullYear(),
-        fechaActual.getUTCMonth(),
-        fechaActual.getUTCDate(),
-        0,
-        0,
-        0,
-      ),
+      fechaActual.getFullYear(),
+      fechaActual.getMonth(),
+      fechaActual.getDate(),
+      0,
+      0,
+      0,
     );
     const finDia = new Date(
-      Date.UTC(
-        fechaActual.getUTCFullYear(),
-        fechaActual.getUTCMonth(),
-        fechaActual.getUTCDate(),
-        23,
-        59,
-        59,
-      ),
+      fechaActual.getFullYear(),
+      fechaActual.getMonth(),
+      fechaActual.getDate(),
+      23,
+      59,
+      59,
     );
 
     try {
