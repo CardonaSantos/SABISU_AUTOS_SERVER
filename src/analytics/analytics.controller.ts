@@ -7,6 +7,7 @@ import {
   Param,
   Delete,
   ParseIntPipe,
+  Query,
 } from '@nestjs/common';
 import { AnalyticsService } from './analytics.service';
 import { CreateAnalyticsDto } from './dto/create-analytics.dto';
@@ -21,9 +22,21 @@ export class AnalyticsController {
     return this.analyticsService.create(createAnalyticsDto);
   }
 
-  @Get()
-  findAll() {
-    return this.analyticsService.findAll();
+  @Get('/venta-dia/:idSucursal')
+  async getVentasDiaII(@Param('idSucursal', ParseIntPipe) idSucursal: number) {
+    console.log(
+      'ENTRANDO AL CONTROLLER DE LAS VENTAS DEL DÍA==================>',
+    );
+
+    const totalDeHoy = await this.analyticsService.getVentasDiaII(idSucursal);
+    return {
+      totalDeHoy,
+    };
+  }
+
+  @Get('sucursales-summary')
+  async getSucursalesSummary() {
+    return this.analyticsService.getSucursalesSummary();
   }
 
   @Get('/get-ventas/mes/:id')

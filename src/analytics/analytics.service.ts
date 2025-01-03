@@ -231,10 +231,11 @@ export class AnalyticsService {
     }
   }
 
-  async getVentasDia(idSucursal: number): Promise<number> {
-    const fechaActual = new Date();
+  async getVentasDia(idSucursal: number, fecha?: string): Promise<number> {
+    // Si no se pasa una fecha, usamos la fecha actual
+    const fechaActual = fecha ? new Date(fecha) : new Date();
 
-    // Asegurar que los rangos se calculan en UTC
+    // Eliminar la hora de la fecha seleccionada
     const inicioDia = new Date(
       fechaActual.getFullYear(),
       fechaActual.getMonth(),
@@ -257,20 +258,116 @@ export class AnalyticsService {
         where: {
           sucursalId: idSucursal,
           fechaVenta: {
-            gte: inicioDia,
-            lte: finDia,
+            gte: inicioDia, // Inicio del día
+            lte: finDia, // Fin del día
           },
         },
         _sum: {
-          totalVenta: true,
+          totalVenta: true, // Sumar el total de ventas
         },
       });
 
-      return ventasTotalMonto._sum.totalVenta || 0; // Si no hay ventas, retornar 0
+      return ventasTotalMonto._sum.totalVenta || 0; // Si no hay ventas, retorna 0
     } catch (error) {
       console.error('Error al calcular las ventas del día:', error);
       throw new InternalServerErrorException(
         'Error al calcular el monto total de ventas del día',
+      );
+    }
+  }
+
+  // async getVentasDiaII(idSucursal: number) {
+  //   try {
+  //     // Get the current date
+  //     const now = new Date();
+
+  //     // Build the start and end of the day (local time)
+  //     const startOfDay = new Date(
+  //       now.getFullYear(),
+  //       now.getMonth(),
+  //       now.getDate(),
+  //       0,
+  //       0,
+  //       0,
+  //     );
+  //     const endOfDay = new Date(
+  //       now.getFullYear(),
+  //       now.getMonth(),
+  //       now.getDate(),
+  //       23,
+  //       59,
+  //       59,
+  //     );
+
+  //     // Retrieve all sales that fall within today’s date range for the given sucursal
+  //     const ventasDeHoy = await this.prisma.venta.findMany({
+  //       where: {
+  //         sucursalId: idSucursal,
+  //         fechaVenta: {
+  //           gte: startOfDay,
+  //           lte: endOfDay,
+  //         },
+  //       },
+  //     });
+
+  //     // Sum up all totalVenta
+  //     const totalDeHoy = ventasDeHoy.reduce(
+  //       (acc, venta) => acc + venta.totalVenta,
+  //       0,
+  //     );
+
+  //     console.log(
+  //       `Total de ventas para la sucursal ${idSucursal} hoy: `,
+  //       totalDeHoy,
+  //     );
+  //     return totalDeHoy;
+  //   } catch (error) {
+  //     console.error('Error al obtener el total de ventas:', error);
+  //     throw new InternalServerErrorException(
+  //       'No se pudo obtener el total de ventas',
+  //     );
+  //   }
+  // }
+  async getVentasDiaII(idSucursal: number) {
+    try {
+      // Obtenemos la fecha de "hoy"
+      const now = new Date();
+
+      // Año, mes, día (en JavaScript, los meses arrancan en 0)
+      const year = now.getFullYear();
+      const month = now.getMonth();
+      const day = now.getDate();
+
+      // Construimos el rango de la medianoche hasta las 23:59:59
+      const startOfDay = new Date(year, month, day, 0, 0, 0);
+      const endOfDay = new Date(year, month, day, 23, 59, 59);
+
+      // Buscamos todas las ventas hechas entre ese rango de fechas (independiente de la hora exacta)
+      const ventasDeHoy = await this.prisma.venta.findMany({
+        where: {
+          sucursalId: idSucursal,
+          fechaVenta: {
+            gte: startOfDay, // >= 2 de ene, 2025 00:00:00
+            lte: endOfDay, // <= 2 de ene, 2025 23:59:59
+          },
+        },
+      });
+
+      // Sumamos el total de ventas de este día
+      const totalDeHoy = ventasDeHoy.reduce(
+        (acc, venta) => acc + venta.totalVenta,
+        0,
+      );
+
+      console.log(
+        `Total de ventas hoy para sucursal ${idSucursal}:`,
+        totalDeHoy,
+      );
+      return totalDeHoy;
+    } catch (error) {
+      console.error('Error al obtener el total de ventas de hoy:', error);
+      throw new InternalServerErrorException(
+        'No se pudo obtener el total de ventas de hoy',
       );
     }
   }
@@ -293,5 +390,18 @@ export class AnalyticsService {
 
   remove(id: number) {
     return `This action removes a #${id} analytics`;
+  }
+
+  async getSucursalesSummary() {
+    // Aquí pedimos todas las sucursales e incluimos el registro de SucursalSaldo
+    const sucursales = await this.prisma.sucursal.findMany({
+      include: {
+        SucursalSaldo: true,
+      },
+    });
+
+    // Opcionalmente podrías hacer cálculos o mapear los datos,
+    // pero por ahora simplemente retornamos todo tal cual
+    return sucursales;
   }
 }
