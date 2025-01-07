@@ -707,7 +707,6 @@ model Venta {
   @@unique([imei, id]) // Permite null en `imei` sin conflicto de unicidad 
   registroCajaId    Int?        // ID del turno de caja al que pertenece la venta
   registroCaja      RegistroCaja? @relation(fields: [registroCajaId], references: [id], onDelete: SetNull)
-  
   // Relación opcional con una VentaCuota
   ventaCuota          VentaCuota?
 }
