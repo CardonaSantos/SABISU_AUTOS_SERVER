@@ -34,6 +34,7 @@ import { CajaModule } from './caja/caja.module';
 import { SaleDeletedModule } from './sale-deleted/sale-deleted.module';
 import { CuotasModule } from './cuotas/cuotas.module';
 import { RepairModule } from './repair/repair.module';
+import { MetasModule } from './metas/metas.module';
 
 @Module({
   imports: [
@@ -73,6 +74,7 @@ import { RepairModule } from './repair/repair.module';
     SaleDeletedModule,
     CuotasModule,
     RepairModule,
+    MetasModule,
   ],
   controllers: [AppController],
   providers: [AppService],

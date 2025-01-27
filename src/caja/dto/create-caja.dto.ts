@@ -18,7 +18,7 @@ export class CreateCajaDto {
 
   @IsOptional()
   @IsInt()
-  usuarioId?: number;
+  usuarioId: number;
 
   @IsNumber()
   saldoInicial: number;

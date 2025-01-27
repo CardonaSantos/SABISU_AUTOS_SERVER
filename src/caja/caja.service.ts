@@ -66,6 +66,36 @@ export class CajaService {
         });
       }
 
+      //AHORA ACTUALIZAR LA META MAS RECIENTE XDDDDDDDDDDDD
+      const metaMasReciente = await this.prisma.metaUsuario.findFirst({
+        where: {
+          usuarioId: Number(createCajaDto.usuarioId),
+          cumplida: false,
+        },
+        orderBy: {
+          fechaInicio: 'desc', // Ordena por la fecha más reciente
+        },
+      });
+
+      if (!metaMasReciente) {
+        throw new BadRequestException(
+          `No se encontró ninguna meta para el usuario con ID ${createCajaDto.usuarioId}`,
+        );
+      }
+      // Actualiza el registro encontrado
+      const metaTienda = await this.prisma.metaUsuario.update({
+        where: {
+          id: metaMasReciente.id, // Usa el ID único de la meta
+        },
+        data: {
+          montoActual: {
+            increment: Number(createCajaDto.saldoFinal) || 0, // Incrementa el monto actual
+          },
+        },
+      });
+
+      console.log('El registro de meta de tienda actualizado es: ', metaTienda);
+
       return registUpdate;
     } catch (error) {
       console.error('Error al cerrar el registro de caja:', error);

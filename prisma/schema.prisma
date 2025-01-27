@@ -74,19 +74,6 @@ enum EstadoReparacion {
   FINALIZADO
 }
 
-
-
-// model Comprobante {
-//   id                 Int       @id @default(autoincrement())
-//   reparacionId       Int       @unique // Relación con la reparación
-//   reparacion         Reparacion @relation(fields: [reparacionId], references: [id], onDelete: Cascade)
-//   detalles           Json      // Detalles del comprobante (puede ser un JSON para flexibilidad)
-//   creadoEn           DateTime  @default(now()) // Fecha de generación
-// }
-
-
-
-
 //============================>SALDOS Y OTROS
 
 model VentaCuota {
@@ -528,6 +515,12 @@ model Sucursal {
   PlantillaComprobante PlantillaComprobante[]
 
   Reparacion Reparacion[]
+
+  MetaUsuario MetaUsuario[]
+
+  MetaCobros MetaCobros[]
+
+  DepositoCobro DepositoCobro[]
 }
 
 model EntregaStock {
@@ -584,7 +577,81 @@ model Usuario {
   Reparacion Reparacion[]
 
   RegistroReparacion RegistroReparacion[]
+
+  MetaUsuario MetaUsuario[]
+
+  MetaCobros MetaCobros[]
+
+  DepositoCobro DepositoCobro[]
 }
+
+model MetaUsuario {
+  id            Int       @id @default(autoincrement())
+  usuarioId     Int       // Relación con el usuario
+  usuario       Usuario    @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  sucursalId    Int       // Relación con la sucursal donde se establece la meta
+  sucursal      Sucursal   @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+  fechaInicio   DateTime   @default(now())
+  fechaFin      DateTime   // Fin del plazo de la meta
+  montoMeta     Float      // Monto de ventas objetivo
+  montoActual   Float      @default(0) // Ventas acumuladas por el usuario dentro del plazo
+  cumplida      Boolean    @default(false) // Indica si la meta fue cumplida
+  fechaCumplida DateTime?  // Fecha en que se cumplió la meta, si aplica
+  numeroVentas  Float     // El numero de ventas hasta el momento
+  tituloMeta    String?
+  estado        EstadoMetaTienda
+  // @@index([usuarioId, sucursalId])
+}
+
+
+model MetaCobros {
+  id            Int       @id @default(autoincrement())
+  usuarioId     Int       // Relación con el usuario
+  usuario       Usuario    @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  sucursalId    Int       // Relación con la sucursal donde se establece la meta
+  sucursal      Sucursal   @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+  fechaCreado   DateTime   @default(now()) // Fecha en que se creó la meta
+
+  fechaInicio   DateTime   @default(now())
+  fechaFin      DateTime   // Fin del plazo de la meta
+  montoMeta     Float      // Monto objetivo de cobros a alcanzar
+  montoActual   Float      @default(0) // Cobros acumulados por el usuario hasta ahora
+  cumplida      Boolean    @default(false) // Indica si la meta fue cumplida
+  fechaCumplida DateTime?  // Fecha en que se cumplió la meta, si aplica
+  numeroDepositos Int      @default(0) // Número de depósitos realizados hasta el momento
+  tituloMeta      String?
+  estado        EstadoMetaCobro
+  DepositoCobro DepositoCobro[]
+}
+
+enum EstadoMetaCobro {
+  CANCELADO
+  ABIERTO
+  FINALIZADO
+}
+
+enum EstadoMetaTienda {
+  CANCELADO
+  ABIERTO
+  FINALIZADO
+}
+
+model DepositoCobro {
+  id              Int       @id @default(autoincrement())
+  usuarioId       Int       // Relación con el usuario que hizo el depósito
+  usuario         Usuario    @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  sucursalId      Int       // Relación con la sucursal del depósito
+  sucursal        Sucursal   @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+  numeroBoleta    String     // Número de boleta o comprobante del depósito
+  fechaRegistro   DateTime   @default(now()) // Fecha en la que se registró el depósito
+  montoDepositado Float      // Monto del depósito realizado
+  descripcion     String?    // Descripción o nota opcional sobre el depósito
+
+  metaCobroId     Int           // Relación con MetaCobros
+  metaCobro       MetaCobros     @relation(fields: [metaCobroId], references: [id], onDelete: Cascade) // Relación N:1 con MetaCobros
+}
+
+
 
 model Cliente {
   id              Int          @id @default(autoincrement())
