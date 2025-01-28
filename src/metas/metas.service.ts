@@ -226,6 +226,7 @@ export class MetasService {
           },
           data: {
             cumplida: true,
+            estado: 'FINALIZADO',
           },
         });
       }

@@ -66,26 +66,42 @@ export class CajaService {
         });
       }
 
-      //AHORA ACTUALIZAR LA META MAS RECIENTE XDDDDDDDDDDDD
-      const metaMasReciente = await this.prisma.metaUsuario.findFirst({
+      // Buscar la meta más reciente no cumplida o no finalizada
+      let metaMasReciente = await this.prisma.metaUsuario.findFirst({
         where: {
           usuarioId: Number(createCajaDto.usuarioId),
           cumplida: false,
+          estado: 'ABIERTO', // Meta activa
         },
         orderBy: {
           fechaInicio: 'desc', // Ordena por la fecha más reciente
         },
       });
 
-      if (!metaMasReciente) {
-        throw new BadRequestException(
-          `No se encontró ninguna meta para el usuario con ID ${createCajaDto.usuarioId}`,
-        );
+      // Si no encuentra una meta activa, buscar las más antiguas abiertas
+      while (!metaMasReciente) {
+        metaMasReciente = await this.prisma.metaUsuario.findFirst({
+          where: {
+            usuarioId: Number(createCajaDto.usuarioId),
+            cumplida: false,
+            estado: 'ABIERTO', // Meta activa
+          },
+          orderBy: {
+            fechaInicio: 'desc', // Ordena por la fecha más reciente
+          },
+        });
+
+        if (!metaMasReciente) {
+          throw new BadRequestException(
+            `No se encontró ninguna meta activa para el usuario con ID ${createCajaDto.usuarioId}`,
+          );
+        }
       }
-      // Actualiza el registro encontrado
+
+      // Actualiza la meta encontrada
       const metaTienda = await this.prisma.metaUsuario.update({
         where: {
-          id: metaMasReciente.id, // Usa el ID único de la meta
+          id: metaMasReciente.id,
         },
         data: {
           montoActual: {
@@ -94,8 +110,41 @@ export class CajaService {
         },
       });
 
-      console.log('El registro de meta de tienda actualizado es: ', metaTienda);
+      // Si la meta ya se cumplió, finalízala
+      // Actualiza la meta encontrada
+      // await this.prisma.metaUsuario.update({
+      //   where: {
+      //     id: metaMasReciente.id,
+      //   },
+      //   data: {
+      //     montoActual: {
+      //       increment: Number(createCajaDto.saldoFinal) || 0, // Incrementa el monto actual
+      //     },
+      //   },
+      // });
 
+      // Vuelve a consultar la meta actualizada
+      const metaActualizada = await this.prisma.metaUsuario.findUnique({
+        where: {
+          id: metaMasReciente.id,
+        },
+      });
+
+      // Si la meta ya se cumplió, finalízala
+      if (metaActualizada.montoActual >= metaActualizada.montoMeta) {
+        await this.prisma.metaUsuario.update({
+          where: {
+            id: metaActualizada.id,
+          },
+          data: {
+            cumplida: true,
+            estado: 'FINALIZADO',
+            fechaCumplida: new Date(),
+          },
+        });
+      }
+
+      console.log('El registro de meta de tienda actualizado es: ', metaTienda);
       return registUpdate;
     } catch (error) {
       console.error('Error al cerrar el registro de caja:', error);
