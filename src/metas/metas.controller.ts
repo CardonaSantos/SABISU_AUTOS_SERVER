@@ -90,6 +90,24 @@ export class MetasController {
     return this.metasService.removeOneDepo(metaId, id);
   }
 
+  @Delete('/delete-one-goal/:id/:adminId')
+  removeOneGoal(
+    @Param('id', ParseIntPipe) id: number, // Recibe el ID desde la URL
+    @Param('adminId', ParseIntPipe) adminId: number, // Recibe el ID ADMIN
+    @Body('passwordAdmin') passwordAdmin: string, // Recibe la contraseña desde el cuerpo
+  ) {
+    return this.metasService.removeOneGoal(id, adminId, passwordAdmin); // Llama al servicio con el ID y la contraseña
+  }
+
+  @Delete('/delete-one-cobro-goal/:id/:adminId')
+  removeOneCobroMeta(
+    @Param('id', ParseIntPipe) id: number, // Recibe el ID desde la URL
+    @Param('adminId', ParseIntPipe) adminId: number, // Recibe el ID ADMIN
+    @Body('passwordAdmin') passwordAdmin: string, // Recibe la contraseña desde el cuerpo
+  ) {
+    return this.metasService.removeOneCobroMeta(id, adminId, passwordAdmin); // Llama al servicio con el ID y la contraseña
+  }
+
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.metasService.remove(+id);

@@ -2,15 +2,15 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import { UpdateMetaDto } from './dto/update-meta.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateMetaUsuarioDto } from './dto/MetaUsuarioDTO.dto';
 import { CreateMetaCobrosDto } from './dto/MetaCobrosDTO.dto';
-import { error } from 'console';
 import { CreateDepositoCobroDto } from './dto/DepositoCobroDTO.dto';
-
+import * as bcrypt from 'bcryptjs';
 @Injectable()
 export class MetasService {
   constructor(private readonly prisma: PrismaService) {}
@@ -408,6 +408,102 @@ export class MetasService {
 
       throw new BadRequestException(
         'Error al eliminar el depósito y actualizar la meta.',
+      );
+    }
+  }
+
+  async removeOneGoal(id: number, adminId: number, passwordAdmin: string) {
+    try {
+      if (!id || !passwordAdmin) {
+        throw new BadRequestException('Faltan datos...');
+      }
+
+      const admin = await this.prisma.usuario.findUnique({
+        where: { id: adminId },
+      });
+
+      if (!admin) {
+        throw new BadRequestException('Administrador no encontrado');
+      }
+
+      // Definir roles permitidos
+      const rolesPermitidos = ['ADMIN', 'MANAGER', 'SUPER_ADMIN'];
+
+      if (!rolesPermitidos.includes(admin.rol)) {
+        throw new BadRequestException(
+          'El usuario no tiene permisos suficientes',
+        );
+      }
+
+      const contraseñaValida = await bcrypt.compare(
+        passwordAdmin,
+        admin.contrasena,
+      );
+      if (!contraseñaValida) {
+        throw new BadRequestException('Contraseña incorrecta');
+      }
+
+      const meta = await this.prisma.metaUsuario.delete({
+        where: { id: id },
+      });
+
+      console.log('La meta eliminada es: ', meta);
+      return meta;
+    } catch (error) {
+      console.error('Error al eliminar el registro de meta:', error);
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        'Error al eliminar el registro de meta',
+      );
+    }
+  }
+
+  async removeOneCobroMeta(id: number, adminId: number, passwordAdmin: string) {
+    try {
+      if (!id || !passwordAdmin) {
+        throw new BadRequestException('Faltan datos...');
+      }
+
+      const admin = await this.prisma.usuario.findUnique({
+        where: { id: adminId },
+      });
+
+      if (!admin) {
+        throw new BadRequestException('Administrador no encontrado');
+      }
+
+      // Definir roles permitidos
+      const rolesPermitidos = ['ADMIN', 'MANAGER', 'SUPER_ADMIN'];
+
+      if (!rolesPermitidos.includes(admin.rol)) {
+        throw new BadRequestException(
+          'El usuario no tiene permisos suficientes',
+        );
+      }
+
+      const contraseñaValida = await bcrypt.compare(
+        passwordAdmin,
+        admin.contrasena,
+      );
+      if (!contraseñaValida) {
+        throw new BadRequestException('Contraseña incorrecta');
+      }
+
+      const meta = await this.prisma.metaCobros.delete({
+        where: { id: id },
+      });
+
+      console.log('La meta eliminada es: ', meta);
+      return meta;
+    } catch (error) {
+      console.error('Error al eliminar el registro de meta:', error);
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        'Error al eliminar el registro de meta',
       );
     }
   }
