@@ -896,6 +896,7 @@ enum MetodoPago {
   PAYPAL
   OTRO
   CUTOAS
+  CREDITO
 }
 
 enum TipoPrecio {

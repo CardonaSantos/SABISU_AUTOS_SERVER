@@ -1,4 +1,10 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { CreateCuotaDto } from './dto/create-cuota.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { UpdateVentaCuotaDto } from './dto/update-cuota.dto';
@@ -7,6 +13,9 @@ import { CreatePlantillaComprobanteDto } from './dto/plantilla-comprobante.dt';
 import { CuotaDto } from './dto/registerNewPay';
 import { CloseCreditDTO } from './dto/close-credit.dto';
 import { CreditoRegistro, Testigo } from './TypeCredit';
+import { DeleteOneRegistCreditDto } from './dto/delete-one-regist.dto';
+
+import * as bcrypt from 'bcryptjs';
 
 @Injectable()
 export class CuotasService {
@@ -104,7 +113,7 @@ export class CuotasService {
         data: {
           ventaId: venta.id,
           monto: createVentaCuotaDto.cuotaInicial,
-          metodoPago: 'OTRO',
+          metodoPago: 'CREDITO',
           fechaPago: new Date(),
         },
       });
@@ -819,6 +828,133 @@ export class CuotasService {
     } catch (error) {
       console.log(error);
       throw new BadRequestException('Error al eliminar');
+    }
+  }
+
+  async deleteOneCreditRegist(deleteOneCreditDto: DeleteOneRegistCreditDto) {
+    console.log('Entrando a la eliminación de registro de crédito');
+    console.log('Datos recibidos:', deleteOneCreditDto);
+
+    const { creditId, passwordAdmin, sucursalId, userId } = deleteOneCreditDto;
+    console.log('El id de la sucursal es: ', sucursalId);
+
+    try {
+      const userAdmin = await this.prisma.usuario.findUnique({
+        where: { id: userId },
+        select: { rol: true, contrasena: true },
+      });
+
+      if (!userAdmin) {
+        throw new NotFoundException('Usuario administrador no encontrado');
+      }
+
+      if (!['ADMIN', 'SUPER_ADMIN'].includes(userAdmin.rol)) {
+        throw new UnauthorizedException('El usuario no es administrador');
+      }
+
+      const isValidPassword = await bcrypt.compare(
+        passwordAdmin,
+        userAdmin.contrasena,
+      );
+      if (!isValidPassword) {
+        throw new UnauthorizedException('Contraseña incorrecta');
+      }
+
+      const sucursal = await this.prisma.sucursal.findUnique({
+        where: { id: sucursalId },
+      });
+
+      if (!sucursal) {
+        throw new NotFoundException('Sucursal no encontrada');
+      }
+
+      const creditToDelete = await this.prisma.ventaCuota.findUnique({
+        where: { id: creditId },
+        include: {
+          venta: {
+            select: {
+              id: true,
+            },
+          },
+        },
+      });
+
+      if (!creditToDelete) {
+        throw new NotFoundException('No se encontró el registro de crédito');
+      }
+
+      // Obtener todas las cuotas asociadas
+      const cuotas = await this.prisma.cuota.findMany({
+        where: { ventaCuotaId: creditId },
+      });
+
+      const total = cuotas.reduce(
+        (acc, c) => acc + c.monto,
+        creditToDelete.cuotaInicial,
+      );
+      console.log('El total de todas las cuotas es:', total);
+
+      // Actualizar el saldo de la sucursal
+      const x = await this.prisma.sucursalSaldo.findUnique({
+        where: { sucursalId: sucursal.id },
+      });
+      console.log('El saldo actual es: ', x);
+
+      await this.prisma.sucursalSaldo.update({
+        where: { sucursalId: sucursal.id },
+        data: {
+          saldoAcumulado: { decrement: total },
+          totalEgresos: { increment: total },
+        },
+      });
+
+      const l = await this.prisma.sucursalSaldo.findUnique({
+        where: { sucursalId: sucursal.id },
+      });
+      console.log('El saldo actual es: ', l);
+
+      await this.prisma.cuota.deleteMany({
+        where: { ventaCuotaId: creditId },
+      });
+
+      await this.prisma.ventaCuota.delete({
+        where: { id: creditId },
+      });
+
+      const ventaToDelete = await this.prisma.venta.findUnique({
+        where: {
+          id: creditToDelete.venta.id,
+        },
+      });
+
+      if (!ventaToDelete) {
+        throw new NotFoundException('Venta no encontrada, error');
+      }
+
+      await this.prisma.venta.delete({
+        where: {
+          id: ventaToDelete.id,
+        },
+      });
+
+      console.log('La venta a eliminar es: ', ventaToDelete);
+
+      console.log('Crédito eliminado correctamente');
+
+      // const creditosActualizados = await this.getAllCredits();
+
+      return;
+    } catch (error) {
+      console.error('Error al eliminar crédito:', error);
+
+      if (
+        error instanceof NotFoundException ||
+        error instanceof UnauthorizedException
+      ) {
+        throw error;
+      }
+
+      throw new InternalServerErrorException('Ocurrió un error inesperado');
     }
   }
 }
