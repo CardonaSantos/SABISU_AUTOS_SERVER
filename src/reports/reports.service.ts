@@ -8,6 +8,7 @@ import { formatInTimeZone } from 'date-fns-tz';
 import { format } from 'date-fns';
 // import { format } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
+import * as dayjs from 'dayjs';
 
 // import { utcToZonedTime } from "date-fns-tz";
 
@@ -174,6 +175,19 @@ export class ReportsService {
         include: {
           cliente: { select: { nombre: true, telefono: true } },
           cuotas: { select: { id: true, monto: true, creadoEn: true } },
+          venta: {
+            select: {
+              id: true,
+              productos: {
+                select: {
+                  cantidad: true,
+                  producto: true,
+                  id: true,
+                  precioVenta: true,
+                },
+              },
+            },
+          },
         },
       });
 
@@ -181,84 +195,313 @@ export class ReportsService {
 
       // Crear el archivo Excel
       const workbook = new ExcelJS.Workbook();
-      const creditosSheet = workbook.addWorksheet('Historial de Créditos');
-      const pagosSheet = workbook.addWorksheet('Pagos de Créditos');
-      const creditosTotales = workbook.addWorksheet('Creditos Totales');
+      const creditosSheet = workbook.addWorksheet('CRÉDITOS');
+      const totalesSheet = workbook.addWorksheet('TOTALES');
 
-      // Configuración de columnas
+      const morososSheet = workbook.addWorksheet('MOROSOS');
+
+      // Encuentra el máximo de cuotasTotales
+      const maxCuotasTotales = Math.max(
+        ...creditos.map((c) => c.cuotasTotales),
+      );
+
+      const paymentColumns = [];
+      for (let i = 1; i <= maxCuotasTotales; i++) {
+        paymentColumns.push(
+          {
+            header: `Pago ${i} Fecha`,
+            key: `pago${i}FechaEsperada`,
+            width: 20,
+          },
+
+          { header: `Pago ${i} Monto`, key: `pago${i}Monto`, width: 15 },
+        );
+      }
+      // Configuración de columnas de creditos activos
       creditosSheet.columns = [
-        { header: 'ID Crédito', key: 'id', width: 15 },
-        { header: 'Cliente', key: 'cliente', width: 30 },
-        { header: 'Teléfono', key: 'telefono', width: 15 },
-        { header: 'Monto con Interés', key: 'montoConInteres', width: 20 },
-        { header: 'Interés (%)', key: 'interes', width: 15 },
-        { header: 'Fecha Inicio', key: 'fechaInicio', width: 20 },
-        { header: 'Estado', key: 'estado', width: 15 },
+        // { header: 'ID Crédito', key: 'id', width: 15 },
+        { header: 'CREDITO', key: 'credito', width: 15 },
+        { header: 'CLIENTE', key: 'cliente', width: 30 },
+        { header: 'TELEFONO', key: 'telefono', width: 15 }, // Corrección aquí
+        { header: 'ESTADO', key: 'estado', width: 15 }, // Corrección aquí
+        { header: 'FECHA VENTA', key: 'fechaInicio', width: 20 },
+        { header: 'PRODUCTO', key: 'producto', width: 20 },
+        {
+          header: 'MONTO TOTAL CON INTERES',
+          key: 'montoConInteres',
+          width: 30,
+        },
+
+        {
+          header: 'PAGADO',
+          key: 'pagado',
+          width: 20,
+        },
+
+        {
+          header: 'INTERES',
+          key: 'interes',
+          width: 20,
+        },
+
+        {
+          header: 'ENGANCHE',
+          key: 'pagoInicial',
+          width: 20,
+        },
+
+        {
+          header: 'DIAS ENTRE PAGOS', //solo de muestra para que veas
+          key: 'diasEntrePagos',
+          width: 20,
+        },
+        ...paymentColumns,
       ];
 
-      pagosSheet.columns = [
-        { header: 'ID Crédito', key: 'creditoId', width: 15 },
-        { header: 'ID Pago', key: 'id', width: 15 },
-        { header: 'Monto', key: 'monto', width: 15 },
-        { header: 'Fecha Pago', key: 'timestamp', width: 20 },
+      totalesSheet.columns = [
+        {
+          header: 'OTORGADOS', //solo de muestra para que veas
+          key: 'otorgados',
+          width: 20,
+        },
+        {
+          header: 'RECUPERADOS', //solo de muestra para que veas
+          key: 'recuperados',
+          width: 20,
+        },
+        {
+          header: 'POR RECUPERAR', //solo de muestra para que veas
+          key: 'porRecuperar',
+          width: 20,
+        },
       ];
 
-      creditosTotales.columns = [
-        { header: 'ID Crédito', key: 'creditoId', width: 15 },
-        { header: 'Fecha', key: 'fecha', width: 15 },
-        { header: 'Pagos', key: 'pagos', width: 15 },
-        { header: 'Otorgados', key: 'otorgados', width: 20 },
-        { header: 'Pagos', key: 'pagado', width: 20 },
-        { header: 'Por recuperar', key: 'porRecuperar', width: 20 },
+      // Configuración de columnas de MOROSOS
+      morososSheet.columns = [
+        { header: 'CLIENTE', key: 'cliente', width: 15 },
+        { header: 'TELEFONO', key: 'telefono', width: 15 },
+        { header: 'ESTADO', key: 'estado', width: 15 },
+        { header: 'FECHA VENTA', key: 'fechaVenta', width: 20 },
+        { header: 'PRODUCTO', key: 'producto', width: 20 },
+        { header: 'MONTO CON INTERÉS', key: 'montoConInteres', width: 20 },
+        { header: 'ENGANCHE', key: 'enganche', width: 20 },
+        { header: 'POR RECUPERAR', key: 'porRecuperar', width: 20 },
       ];
 
-      creditos.forEach((credito) => {
-        creditosTotales.addRow({
-          creditoId: credito.id,
-          fecha: credito.fechaInicio,
-          pagos: credito.cuotas.length,
-          otorgados: credito.montoTotalConInteres,
-          pagado: credito.totalPagado,
-          porRecuperar: credito.montoTotalConInteres - credito.totalPagado,
-        });
+      // Aplicar estilo a la primera fila (encabezados)
+      const headerRowMorosos = morososSheet.getRow(1);
+      headerRowMorosos.eachCell((cell) => {
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFD3D3D3' }, // Color gris claro
+        };
+        cell.font = {
+          bold: true,
+          color: { argb: 'FF000000' }, // Color negro texto
+        };
       });
 
-      // Rellenar filas con datos
-      creditos.forEach((credito) => {
-        creditosSheet.addRow({
-          id: credito.id,
-          cliente: credito.cliente?.nombre || 'Sin cliente',
-          telefono: credito.cliente?.telefono || 'N/A',
-          montoConInteres: credito.montoTotalConInteres,
-          interes: credito.interes,
-          fechaInicio: formatearFecha(credito.fechaInicio.toISOString()),
-          estado: credito.estado,
+      const headerTotales = totalesSheet.getRow(1);
+      // Pinta cada columna con un color diferente
+      headerTotales.getCell('otorgados').fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'f5a002' }, // Rojo-naranja
+      };
+
+      headerTotales.getCell('recuperados').fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: '00cc14' }, // Verde
+      };
+
+      headerTotales.getCell('porRecuperar').fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: '5200cc' }, // Azul
+      };
+
+      // Aplica negrita a todas las celdas
+      headerTotales.eachCell((cell) => {
+        cell.font = { bold: true, color: { argb: 'FFFFFF' } }; // Blanco
+      });
+
+      // Colores personalizados para encabezados generales
+      const generalHeaderColors = [
+        '1F497D', // Azul oscuro
+        '8403FC', // Naranja
+        '4F81BD', // Azul claro
+        'f70777', //NUEVO COLOR
+        '228B22', // Verde
+        '8E44AD', // Morado
+        'D35400', // Rojo oscuro
+        '2C3E50', // Azul grisáceo
+        '16A085', // Verde azulado
+        'C0392B', // Rojo intenso
+      ];
+
+      const paymentDateColor = '4a08bd'; // Verde para fechas de pago
+      const paymentAmountColor = 'f70254'; // Naranja para montos de pago
+
+      // Aplicar colores a cada celda de la primera fila
+      const headerRow = creditosSheet.getRow(1);
+      headerRow.eachCell((cell, colNumber) => {
+        const cellValue = cell.value?.toString() || '';
+
+        let color: string;
+
+        if (cellValue.includes('Pago') && cellValue.includes('Fecha')) {
+          color = paymentDateColor; // Verde para "Pago X Fecha"
+        } else if (cellValue.includes('Pago') && cellValue.includes('Monto')) {
+          color = paymentAmountColor; // Naranja para "Pago X Monto"
+        } else {
+          color =
+            generalHeaderColors[(colNumber - 1) % generalHeaderColors.length]; // Rotar en la paleta general
+        }
+
+        // Aplicar estilos
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }; // Texto blanco
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: color },
+        };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      });
+
+      // Rellenar filas con datos de la primer hoja de creditos activos
+      creditos
+        .filter(
+          (credito) =>
+            credito.totalPagado < credito.montoTotalConInteres &&
+            credito.estado == 'ACTIVA',
+        )
+        .forEach((credito) => {
+          const rowData = {
+            id: credito.id,
+            credito: `CREDITO-00${credito.id}`,
+            cliente: credito.cliente?.nombre || 'Sin cliente',
+            telefono: credito.cliente?.telefono || 'N/A',
+            estado: credito.estado || 'N/A',
+            fechaInicio: formatearFecha(credito.fechaInicio.toISOString()),
+            producto: credito.venta.productos
+              .map((prod) => `${prod.producto.nombre} (${prod.cantidad})`)
+              .join(', '), // Corregido: usa map + join
+            montoConInteres: credito.montoTotalConInteres,
+            pagado: credito.totalPagado,
+            interes: credito.interes,
+            pagoInicial: credito.cuotaInicial,
+            diasEntrePagos: credito.diasEntrePagos,
+          };
+
+          for (let i = 0; i < credito.cuotasTotales; i++) {
+            const numeroPago = i + 1;
+
+            let diaInicio = dayjs(credito?.fechaInicio);
+
+            // const fechaEsperada = diaInicio.add(credito.diasEntrePagos, 'day');
+
+            const fechaEsperada = diaInicio.add(
+              credito.diasEntrePagos * (i + 1),
+              'day',
+            ); // 👈 (i+1) aquí
+
+            diaInicio = fechaEsperada;
+            rowData[`pago${numeroPago}FechaEsperada`] = formatearFecha(
+              fechaEsperada.toISOString(),
+            );
+
+            // Busca la cuota correspondiente (asumiendo que están en orden)
+            const cuota = credito.cuotas[i];
+            if (cuota) {
+              rowData[`pago${numeroPago}FechaReal`] = formatearFecha(
+                cuota.creadoEn.toISOString(),
+              );
+              rowData[`pago${numeroPago}Monto`] = cuota.monto;
+            } else {
+              // rowData[`pago${numeroPago}FechaReal`] = 'Pendiente';
+              rowData[`pago${numeroPago}Monto`] = 'Pendiente';
+            }
+          }
+
+          creditosSheet.addRow(rowData);
         });
 
-        credito.cuotas.forEach((cuota) => {
-          pagosSheet.addRow({
-            creditoId: credito.id,
-            id: cuota.id,
-            monto: cuota.monto,
-            timestamp: formatearFecha(cuota.creadoEn.toISOString()),
+      let totalesCreditos = creditos.filter(
+        (credit) => (credit.estado = 'ACTIVA'),
+      );
+      const totalOtorgados = totalesCreditos.reduce(
+        (acc, credito) => acc + credito.montoTotalConInteres,
+        0,
+      );
+
+      const totalRecuperados = totalesCreditos.reduce(
+        (acc, credito) => acc + credito.totalPagado,
+        0,
+      );
+
+      const totalPorRecuperar = totalOtorgados - totalRecuperados;
+
+      // Solo agregamos una fila con los totales
+      totalesSheet.addRow({
+        otorgados: totalOtorgados,
+        recuperados: totalRecuperados,
+        porRecuperar: totalPorRecuperar,
+      });
+
+      // OTROS
+      // Filtrar créditos morosos
+      creditos
+        .filter((credito) => {
+          // Si ya pagó todo, no es moroso
+          if (credito.totalPagado >= credito.montoTotalConInteres) return false;
+
+          // Calcular cuántas cuotas deberían haberse pagado hasta hoy
+          const hoy = dayjs();
+          const fechaInicio = dayjs(credito.fechaInicio);
+
+          // Número de cuotas que deberían estar pagadas según el tiempo transcurrido
+          const diasTranscurridos = hoy.diff(fechaInicio, 'day');
+          const cuotasDebidas = Math.floor(
+            diasTranscurridos / credito.diasEntrePagos,
+          );
+
+          // Verificar si hay cuotas impagas dentro de las debidas
+          const cuotasImpagas = credito.cuotas
+            .slice(0, cuotasDebidas)
+            .some((cuota, index) => {
+              const numeroCuota = index + 1;
+              const fechaEsperada = fechaInicio.add(
+                credito.diasEntrePagos * numeroCuota,
+                'day',
+              );
+
+              // Si no existe la cuota o fue pagada después de lo esperado
+              return !cuota || dayjs(cuota.creadoEn).isAfter(fechaEsperada);
+            });
+
+          return cuotasImpagas;
+        })
+
+        .forEach((credito) => {
+          morososSheet.addRow({
+            cliente: credito.cliente.nombre,
+            telefono: credito.cliente.telefono,
+            estado: credito.estado,
+            fechaVenta: credito.fechaInicio,
+            producto: credito.venta.productos
+              .map(
+                (producto) =>
+                  `${producto.producto.nombre} (${producto.cantidad})`,
+              )
+              .join(', '),
+            montoConInteres: credito.montoTotalConInteres,
+            enganche: credito.cuotaInicial,
+            porRecuperar: credito.montoTotalConInteres - credito.totalPagado,
           });
         });
-      });
 
-      // Aplicar estilos
-      [creditosSheet, pagosSheet].forEach((sheet) => {
-        sheet.eachRow((row) => {
-          row.eachCell((cell) => {
-            cell.alignment = {
-              vertical: 'middle',
-              horizontal: 'left',
-              wrapText: true,
-            };
-          });
-        });
-      });
-
-      // Exportar a Buffer
       const uint8Array = await workbook.xlsx.writeBuffer();
       return Buffer.from(uint8Array);
     } catch (error) {
