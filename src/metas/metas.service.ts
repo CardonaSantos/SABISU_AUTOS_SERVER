@@ -225,7 +225,7 @@ export class MetasService {
         },
         where: {
           estado: {
-            notIn: ['CANCELADO', 'CERRADO'],
+            notIn: ['CANCELADO', 'CERRADO', 'FINALIZADO'],
           },
         },
         include: {
@@ -260,7 +260,7 @@ export class MetasService {
         },
         where: {
           //NO EN
-          estado: { notIn: ['CANCELADO'] },
+          estado: { notIn: ['CANCELADO', 'CERRADO', 'FINALIZADO'] },
         },
         select: {
           id: true,
