@@ -14,6 +14,7 @@ import { UpdateMetaDto } from './dto/update-meta.dto';
 import { CreateMetaUsuarioDto } from './dto/MetaUsuarioDTO.dto';
 import { CreateMetaCobrosDto } from './dto/MetaCobrosDTO.dto';
 import { CreateDepositoCobroDto } from './dto/DepositoCobroDTO.dto';
+import { UpdateMetaCobroDto } from './dto/update-meta-cobro.dto';
 
 @Controller('metas')
 export class MetasController {
@@ -44,6 +45,11 @@ export class MetasController {
     return this.metasService.findAllCobrosMetas(id);
   }
 
+  @Get('/get-all-metas-to-summary')
+  findAllMetasToSummary() {
+    return this.metasService.findAllMetasToSummary();
+  }
+
   @Get('/get-all-seller-goals/:id')
   findAllSellerGoal(@Param('id', ParseIntPipe) id: number) {
     return this.metasService.findAllSellerGoal(id);
@@ -64,17 +70,29 @@ export class MetasController {
     return this.metasService.deleteAllMetasUsers();
   }
 
-  //CONSEGUIR REGISTROS DE PAGOS DE MI META
-  // @Get('/get-all-payments-goal/:id')
-  // getAllPaymentsGoal(@Param('id', ParseIntPipe) id: number) {
-  //   return this.metasService.getAllPaymentsGoal(id);
-  // }
-
-  //CREAR DEPOSITO DE COBROS
-
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.metasService.findOne(+id);
+  }
+
+  @Patch('/update-one-meta/:id')
+  updateMetaTienda(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateMetaDto: UpdateMetaDto,
+  ) {
+    console.log('Entrando al service update');
+
+    return this.metasService.updateMetaTienda(id, updateMetaDto);
+  }
+
+  @Patch('/update-one-meta-cobro/:id')
+  updateMetaCobros(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateMetaDto: UpdateMetaCobroDto,
+  ) {
+    console.log('Entrando al service update cobro');
+
+    return this.metasService.updateMetaCobros(id, updateMetaDto);
   }
 
   @Patch(':id')

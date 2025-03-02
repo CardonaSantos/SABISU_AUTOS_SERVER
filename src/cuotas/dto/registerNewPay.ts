@@ -16,6 +16,10 @@ export class CuotaDto {
   @IsNotEmpty()
   ventaCuotaId: number; // Relación con la venta a cuotas
 
+  @IsInt()
+  @IsNotEmpty()
+  CreditoID: number;
+
   @IsPositive()
   monto: number; // Monto de la cuota
 

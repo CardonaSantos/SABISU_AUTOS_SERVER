@@ -11,6 +11,8 @@ import { CreateMetaUsuarioDto } from './dto/MetaUsuarioDTO.dto';
 import { CreateMetaCobrosDto } from './dto/MetaCobrosDTO.dto';
 import { CreateDepositoCobroDto } from './dto/DepositoCobroDTO.dto';
 import * as bcrypt from 'bcryptjs';
+import { UpdateMetaCobroDto } from './dto/update-meta-cobro.dto';
+import { EstadoMetaCobro, EstadoMetaTienda } from '@prisma/client';
 @Injectable()
 export class MetasService {
   constructor(private readonly prisma: PrismaService) {}
@@ -114,6 +116,13 @@ export class MetasService {
       console.log('Metas de las tiendas');
 
       const regists = await this.prisma.metaUsuario.findMany({
+        orderBy: {
+          fechaInicio: 'desc',
+        },
+        where: {
+          //NO EN
+          estado: { notIn: ['CANCELADO'] },
+        },
         select: {
           id: true,
           cumplida: true,
@@ -126,6 +135,7 @@ export class MetasService {
           sucursalId: true,
           tituloMeta: true,
           usuarioId: true,
+          estado: true,
           sucursal: {
             select: {
               id: true,
@@ -159,8 +169,16 @@ export class MetasService {
   async findAllCobrosMetas(idSucursal: number) {
     try {
       const regists = await this.prisma.metaCobros.findMany({
+        // where: {
+        //   sucursalId: idSucursal,
+        // },
+        orderBy: {
+          fechaCreado: 'desc',
+        },
         where: {
-          sucursalId: idSucursal,
+          estado: {
+            notIn: ['CANCELADO'],
+          },
         },
         include: {
           // sucursal: true,
@@ -195,43 +213,140 @@ export class MetasService {
       throw new BadRequestException('Error al ejecutar servicio');
     }
   }
-  async createNewPaymentCobro(createDepositoDTO: CreateDepositoCobroDto) {
+
+  async findAllMetasToSummary() {
     try {
-      const [newPayment, updatedMetaCobro] = await this.prisma.$transaction([
-        // Crear el nuevo depósito
-        this.prisma.depositoCobro.create({
-          data: createDepositoDTO,
-        }),
-        // Actualizar el monto actual en la meta asociada
-        this.prisma.metaCobros.update({
-          where: {
-            id: createDepositoDTO.metaCobroId,
+      const metasCobrosToSummary = await this.prisma.metaCobros.findMany({
+        // where: {
+        //   sucursalId: idSucursal,
+        // },
+        orderBy: {
+          fechaCreado: 'desc',
+        },
+        where: {
+          estado: {
+            notIn: ['CANCELADO', 'CERRADO'],
           },
-          data: {
-            montoActual: {
-              increment: createDepositoDTO.montoDepositado,
+        },
+        include: {
+          DepositoCobro: true,
+          sucursal: {
+            select: {
+              id: true,
+              nombre: true,
+              direccion: true,
+              telefono: true,
+              pbx: true,
             },
           },
-        }),
-      ]);
-
-      // Verificar si la meta ahora está cumplida y actualizar si es necesario
-      if (
-        updatedMetaCobro.montoActual >= updatedMetaCobro.montoMeta &&
-        !updatedMetaCobro.cumplida
-      ) {
-        await this.prisma.metaCobros.update({
-          where: {
-            id: updatedMetaCobro.id,
+          usuario: {
+            select: {
+              id: true,
+              nombre: true,
+              rol: true,
+            },
           },
-          data: {
-            cumplida: true,
-            estado: 'FINALIZADO',
-          },
-        });
+        },
+      });
+      if (!metasCobrosToSummary) {
+        throw new BadRequestException(
+          'Error al encontrar registros de metas cobro',
+        );
       }
 
-      return newPayment;
+      const metasTienda = await this.prisma.metaUsuario.findMany({
+        orderBy: {
+          fechaInicio: 'desc',
+        },
+        where: {
+          //NO EN
+          estado: { notIn: ['CANCELADO'] },
+        },
+        select: {
+          id: true,
+          cumplida: true,
+          fechaCumplida: true,
+          fechaFin: true,
+          fechaInicio: true,
+          montoActual: true,
+          montoMeta: true,
+          numeroVentas: true,
+          sucursalId: true,
+          tituloMeta: true,
+          usuarioId: true,
+          estado: true,
+          sucursal: {
+            select: {
+              id: true,
+              nombre: true,
+              telefono: true,
+              direccion: true,
+            },
+          },
+          usuario: {
+            select: {
+              id: true,
+              nombre: true,
+              correo: true,
+              rol: true,
+            },
+          },
+        },
+      });
+
+      if (!metasTienda) {
+        throw new BadRequestException('Error al encontrar registros de metas');
+      }
+
+      return {
+        metasTienda: metasTienda,
+        metasCobros: metasCobrosToSummary,
+      };
+    } catch (error) {
+      console.log(error);
+      throw new BadRequestException('Error al ejecutar servicio');
+    }
+  }
+
+  async createNewPaymentCobro(createDepositoDTO: CreateDepositoCobroDto) {
+    try {
+      const transactionResult = await this.prisma.$transaction(
+        async (prisma) => {
+          // Crear el nuevo depósito
+          const newPayment = await prisma.depositoCobro.create({
+            data: createDepositoDTO,
+          });
+
+          // Actualizar la meta de cobro
+          const updatedMetaCobro = await prisma.metaCobros.update({
+            where: { id: createDepositoDTO.metaCobroId },
+            data: {
+              montoActual: { increment: createDepositoDTO.montoDepositado },
+            },
+            select: {
+              montoActual: true,
+              montoMeta: true,
+              cumplida: true,
+              id: true,
+            },
+          });
+
+          // Si la meta se ha cumplido, actualizar estado
+          if (
+            updatedMetaCobro.montoActual >= updatedMetaCobro.montoMeta &&
+            !updatedMetaCobro.cumplida
+          ) {
+            await prisma.metaCobros.update({
+              where: { id: updatedMetaCobro.id },
+              data: { cumplida: true, estado: 'FINALIZADO' },
+            });
+          }
+
+          return newPayment;
+        },
+      );
+
+      return transactionResult;
     } catch (error) {
       console.error('Error al crear nuevo pago:', error);
 
@@ -292,6 +407,9 @@ export class MetasService {
 
     try {
       const metasCobros = await this.prisma.metaCobros.findMany({
+        orderBy: {
+          fechaCreado: 'desc',
+        },
         where: {
           usuarioId: userId,
         },
@@ -319,6 +437,9 @@ export class MetasService {
       });
 
       const metasTienda = await this.prisma.metaUsuario.findMany({
+        orderBy: {
+          fechaInicio: 'desc',
+        },
         where: {
           usuarioId: userId,
         },
@@ -518,6 +639,86 @@ export class MetasService {
 
   update(id: number, updateMetaDto: UpdateMetaDto) {
     return `This action updates a #${id} meta`;
+  }
+
+  async updateMetaTienda(id: number, updateMetaDto: UpdateMetaDto) {
+    try {
+      const { tituloMeta, EstadoMetaTienda, montoMeta } = updateMetaDto;
+      const estado = EstadoMetaTienda as EstadoMetaTienda;
+
+      await this.prisma.$transaction(async (tx) => {
+        const metaFind = await tx.metaUsuario.findUnique({
+          where: { id },
+        });
+
+        if (!metaFind) {
+          throw new NotFoundException('Error al encontrar el registro de meta');
+        }
+
+        await tx.metaUsuario.update({
+          where: { id: metaFind.id },
+          data: {
+            // estado: EstadoMetaTienda,
+            estado: estado,
+
+            montoMeta: Number(montoMeta),
+            tituloMeta,
+          },
+        });
+      });
+
+      return 'Meta actualizada'; // 🔹 Mueve el return aquí
+    } catch (error) {
+      console.error('Error en updateMetaTienda:', error);
+      throw new Error('No se pudo actualizar la meta'); // 🔹 Lanza el error para que se maneje correctamente
+    }
+  }
+
+  async updateMetaCobros(id: number, updateMetaDto: UpdateMetaCobroDto) {
+    try {
+      console.log('El ID recibido es:', id);
+      console.log('Datos recibidos:', updateMetaDto);
+
+      // const { tituloMeta, estado, montoMeta } = updateMetaDto;
+      const { tituloMeta, EstadoMetaTienda, montoMeta } = updateMetaDto;
+      const estado = EstadoMetaTienda as EstadoMetaCobro; // 🔹 Convertir y asignar
+
+      await this.prisma.$transaction(async (tx) => {
+        // Buscar la meta antes de actualizar
+        const metaFind = await tx.metaCobros.findUnique({
+          where: { id },
+        });
+
+        if (!metaFind) {
+          throw new NotFoundException('Error al encontrar el registro de meta');
+        }
+
+        // Verificar si el estado es válido antes de actualizar
+        if (
+          !Object.values(EstadoMetaCobro).includes(estado as EstadoMetaCobro)
+        ) {
+          throw new Error(`Estado no válido: ${estado}`);
+        }
+
+        console.log('Actualizando meta con estado:', estado);
+
+        const metaUpdated = await tx.metaCobros.update({
+          where: { id },
+          data: {
+            estado: estado as EstadoMetaCobro, // Aseguramos que sea un enum válido
+            montoMeta: Number(montoMeta),
+            tituloMeta,
+          },
+        });
+
+        console.log('Meta actualizada correctamente:', metaUpdated);
+      });
+
+      return 'Meta actualizada correctamente';
+    } catch (error) {
+      console.error('Error en updateMetaCobros:', error);
+      throw new Error('No se pudo actualizar la meta');
+    }
   }
 
   remove(id: number) {

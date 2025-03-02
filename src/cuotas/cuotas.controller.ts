@@ -18,6 +18,7 @@ import { CreatePlantillaComprobanteDto } from './dto/plantilla-comprobante.dt';
 import { CuotaDto } from './dto/registerNewPay';
 import { CloseCreditDTO } from './dto/close-credit.dto';
 import { DeleteOneRegistCreditDto } from './dto/delete-one-regist.dto';
+import { DeleteCuotaPaymentDTO } from './dto/delete-one-payment-cuota.dto';
 
 @Controller('cuotas')
 export class CuotasController {
@@ -124,5 +125,10 @@ export class CuotasController {
   @Delete('/delete-one-credit-regist')
   deleteOneCreditRegist(@Body() deleteOneCreditDto: DeleteOneRegistCreditDto) {
     return this.cuotasService.deleteOneCreditRegist(deleteOneCreditDto);
+  }
+
+  @Delete('/delete-one-payment-cuota')
+  deleteOnePaymentCuota(@Body() deleteOnePayment: DeleteCuotaPaymentDTO) {
+    return this.cuotasService.deleteOnePaymentCuota(deleteOnePayment);
   }
 }

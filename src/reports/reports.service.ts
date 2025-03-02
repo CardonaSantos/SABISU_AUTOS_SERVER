@@ -509,4 +509,147 @@ export class ReportsService {
       throw new Error('Hubo un problema generando el reporte de créditos.');
     }
   }
+
+  async generarMetasReport(from?: string, to?: string): Promise<Buffer> {
+    try {
+      console.log('Generando reporte de metas...', { from, to });
+
+      const today = dayjs();
+      const thisDay = today.date();
+      const totalDiasMes = today.daysInMonth();
+
+      // Configurar filtros de fechas
+      const whereConditions: any = {
+        estado: {
+          notIn: ['CANCELADO', 'CERRADO'],
+        },
+      };
+      if (from) {
+        const fromDate = new Date(from);
+        fromDate.setHours(0, 0, 0, 0);
+        whereConditions.creadoEn = { gte: fromDate };
+      }
+      if (to) {
+        const toDate = new Date(to);
+        toDate.setHours(23, 59, 59, 999);
+        whereConditions.creadoEn = {
+          ...(whereConditions.creadoEn || {}),
+          lte: toDate,
+        };
+      }
+
+      const [metas, metasCobros] = await Promise.all([
+        this.prisma.metaUsuario.findMany({
+          where: whereConditions,
+
+          include: { usuario: { select: { nombre: true } } },
+        }),
+        this.prisma.metaCobros.findMany({
+          where: whereConditions,
+          include: { usuario: { select: { nombre: true } } },
+        }),
+      ]);
+
+      console.log('Las metas son: ', metas);
+
+      const workbook = new ExcelJS.Workbook();
+      const metasSheet = workbook.addWorksheet('Metas Tienda');
+      const metasCobroSheet = workbook.addWorksheet('Metas Cobro');
+
+      const columns = [
+        { header: 'ID', key: 'id', width: 7 },
+        { header: 'Fecha Inicio', key: 'fechaInicio', width: 20 },
+        { header: 'Titulo', key: 'tituloMeta', width: 25 },
+        { header: 'Usuario', key: 'usuario', width: 25 },
+        { header: 'Monto Meta', key: 'montoMeta', width: 15 },
+        { header: 'Monto Actual', key: 'montoActual', width: 15 },
+        { header: 'Faltante', key: 'faltante', width: 15 },
+        { header: 'Porcentaje', key: 'porcentaje', width: 15 },
+        { header: 'Referencia', key: 'referencia', width: 15 },
+        { header: 'Diferencia', key: 'diferencia', width: 15 },
+        { header: 'Estado', key: 'estado', width: 15 },
+      ];
+
+      metasSheet.columns = columns;
+      metasCobroSheet.columns = columns;
+
+      // Aplicar colores por columna
+      const columnColors = [
+        'CCCCCC', // ID
+        '99CCFF', // Fecha Inicio
+        'FFCC99', // Titulo
+        'FF9966', // Usuario
+        'FFFF99', // Monto Meta
+        '99FF99', // Monto Actual
+        'FF9999', // Faltante
+        '66CCFF', // Porcentaje
+        'CC99FF', // Referencia
+        'FF66CC', // Diferencia
+        '99FFFF', // Estado
+      ];
+
+      const applyHeaderStyle = (sheet) => {
+        const headerRow = sheet.getRow(1);
+        headerRow.eachCell((cell, colNumber) => {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: columnColors[colNumber - 1] },
+          };
+          cell.font = { bold: true, color: { argb: '000000' } };
+          cell.alignment = { horizontal: 'center' };
+        });
+      };
+
+      applyHeaderStyle(metasSheet);
+      applyHeaderStyle(metasCobroSheet);
+
+      metas.forEach((meta) => {
+        const porcentaje =
+          meta.montoMeta > 0 ? (meta.montoActual / meta.montoMeta) * 100 : 0;
+        const referencia = (thisDay / totalDiasMes) * 100;
+        const diferencia = porcentaje - referencia;
+
+        metasSheet.addRow({
+          id: meta.id,
+          fechaInicio: formatearFecha(meta.fechaInicio),
+          tituloMeta: meta.tituloMeta,
+          usuario: meta.usuario.nombre,
+          montoMeta: meta.montoMeta,
+          montoActual: meta.montoActual,
+          faltante: meta.montoMeta - meta.montoActual,
+          porcentaje: `${porcentaje.toFixed(2)}%`,
+          referencia: `${referencia.toFixed(2)}%`,
+          diferencia: `${diferencia.toFixed(2)}%`,
+          estado: meta.estado,
+        });
+      });
+
+      metasCobros.forEach((meta) => {
+        const porcentaje =
+          meta.montoMeta > 0 ? (meta.montoActual / meta.montoMeta) * 100 : 0;
+        const referencia = (thisDay / totalDiasMes) * 100;
+        const diferencia = porcentaje - referencia;
+
+        metasCobroSheet.addRow({
+          id: meta.id,
+          fechaInicio: formatearFecha(meta.fechaInicio),
+          tituloMeta: meta.tituloMeta,
+          usuario: meta.usuario.nombre,
+          montoMeta: meta.montoMeta,
+          montoActual: meta.montoActual,
+          faltante: meta.montoMeta - meta.montoActual,
+          porcentaje: `${porcentaje.toFixed(2)}%`,
+          referencia: `${referencia.toFixed(2)}%`,
+          diferencia: `${diferencia.toFixed(2)}%`,
+          estado: meta.estado,
+        });
+      });
+      const uint8Array = await workbook.xlsx.writeBuffer();
+      return Buffer.from(uint8Array);
+    } catch (error) {
+      console.error('Error al generar reporte de metas:', error);
+      throw new Error('Hubo un problema generando el reporte de metas.');
+    }
+  }
 }

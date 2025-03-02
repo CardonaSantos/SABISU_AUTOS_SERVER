@@ -16,6 +16,8 @@ import { CreditoRegistro, Testigo } from './TypeCredit';
 import { DeleteOneRegistCreditDto } from './dto/delete-one-regist.dto';
 
 import * as bcrypt from 'bcryptjs';
+import * as dayjs from 'dayjs';
+import { DeleteCuotaPaymentDTO } from './dto/delete-one-payment-cuota.dto';
 
 @Injectable()
 export class CuotasService {
@@ -155,6 +157,39 @@ export class CuotasService {
         createVentaCuotaDto.totalVenta,
       );
 
+      //CREAR LAS CUOTAS Y DEMÁS
+
+      // 7. Generar las cuotas programadas
+      const montoTotalConInteres = Number(
+        createVentaCuotaDto.montoTotalConInteres,
+      );
+      const cuotaInicial = Number(createVentaCuotaDto.cuotaInicial);
+      const cuotasTotales = Number(createVentaCuotaDto.cuotasTotales);
+      const diasEntrePagos = Number(createVentaCuotaDto.diasEntrePagos);
+      const fechaInicio = dayjs(createVentaCuotaDto.fechaInicio);
+
+      // Calcular el monto por cuota
+      const montoPorCuota =
+        (montoTotalConInteres - cuotaInicial) / cuotasTotales;
+
+      // Generar cada cuota
+      for (let i = 1; i <= cuotasTotales; i++) {
+        const fechaVencimiento = fechaInicio
+          .add(diasEntrePagos * i, 'day')
+          .toDate();
+
+        let s = await this.prisma.cuota.create({
+          data: {
+            ventaCuotaId: ventaCuota.id,
+            montoEsperado: montoPorCuota,
+            fechaVencimiento: fechaVencimiento,
+            estado: 'PENDIENTE',
+            monto: 0, // Inicializar en 0 hasta que se pague
+          },
+        });
+        console.log('La fecha creada es: ', s);
+      }
+
       //INCREMENTAR EL SALDO
 
       console.log('EL ID DE LA SUCURSAL ES: ', createVentaCuotaDto.sucursalId);
@@ -207,21 +242,27 @@ export class CuotasService {
 
   async registerNewPay(createCuotaDto: CuotaDto) {
     try {
+      // const hoy = dayjs();
+      const cuotaID = createCuotaDto.ventaCuotaId;
+      const CreditoID = createCuotaDto.CreditoID;
       // 1. Crear el registro del pago
-      const newRegist = await this.prisma.cuota.create({
+      const cuotaA_Actualizar = await this.prisma.cuota.update({
+        where: {
+          id: cuotaID,
+        },
         data: {
-          ventaCuotaId: createCuotaDto.ventaCuotaId,
           monto: createCuotaDto.monto,
           estado: createCuotaDto.estado,
           usuarioId: createCuotaDto.usuarioId,
           comentario: createCuotaDto.comentario,
+          fechaPago: new Date(),
         },
       });
 
       // 2. Actualizar el total pagado en la VentaCuota
       const ventaCuotaActualizada = await this.prisma.ventaCuota.update({
         where: {
-          id: createCuotaDto.ventaCuotaId,
+          id: createCuotaDto.CreditoID,
         },
         data: {
           totalPagado: {
@@ -232,6 +273,10 @@ export class CuotasService {
           venta: true, // Incluir la venta asociada
         },
       });
+
+      if (!ventaCuotaActualizada) {
+        throw new NotFoundException('Registro no encontrado');
+      }
 
       // 3. Actualizar el totalVenta en la Venta asociada (si existe)
       if (ventaCuotaActualizada.venta) {
@@ -246,7 +291,6 @@ export class CuotasService {
           },
         });
       }
-
       // 4. Verificar si el crédito está completamente pagado
       // if (
       //   ventaCuotaActualizada.totalPagado + createCuotaDto.monto >=
@@ -258,7 +302,7 @@ export class CuotasService {
       //   });
       // }
 
-      return newRegist;
+      return cuotaA_Actualizar;
     } catch (error) {
       console.error('Error en registerNewPay:', error);
       throw new BadRequestException('Error al registrar pago de cuota');
@@ -283,6 +327,7 @@ export class CuotasService {
             estado: true,
             monto: true,
             fechaPago: true,
+            fechaVencimiento: true,
           },
         },
         cliente: {
@@ -956,5 +1001,119 @@ export class CuotasService {
 
       throw new InternalServerErrorException('Ocurrió un error inesperado');
     }
+  }
+
+  async deleteOnePaymentCuota(deleteOnePayment: DeleteCuotaPaymentDTO) {
+    // Buscar al usuario y verificar su rol y contraseña
+    const userAdmin = await this.prisma.usuario.findUnique({
+      where: { id: deleteOnePayment.userId },
+      select: { contrasena: true, rol: true },
+    });
+
+    const validPassword = await bcrypt.compare(
+      deleteOnePayment.password,
+      userAdmin?.contrasena || '',
+    );
+
+    if (!['ADMIN', 'SUPER_ADMIN'].includes(userAdmin?.rol) || !validPassword) {
+      throw new UnauthorizedException('No tienes permisos para esta acción.');
+    }
+
+    return await this.prisma.$transaction(async (prisma) => {
+      // Buscar la cuota y su relación con el crédito y la venta
+      const cuota = await prisma.cuota.findUnique({
+        where: { id: deleteOnePayment.cuotaID },
+        include: {
+          ventaCuota: {
+            include: {
+              venta: true,
+            },
+          },
+        },
+      });
+
+      if (!cuota) throw new NotFoundException('Error al encontrar la cuota.');
+
+      const { monto, ventaCuota } = cuota;
+      console.log('EL monto pagado que borraremos es: ', monto);
+
+      const { id: ventaCuotaId, totalPagado, venta } = ventaCuota;
+
+      if (!venta) {
+        throw new NotFoundException(
+          'No se encontró la venta asociada al crédito.',
+        );
+      }
+
+      if (!cuota.fechaPago || cuota.monto === 0) {
+        throw new BadRequestException(
+          'Esta cuota ya ha sido modificada o no ha sido pagada.',
+        );
+      }
+
+      // Nuevo total pagado de la ventaCuota
+      const nuevoTotalPagado = totalPagado - monto;
+
+      // Nuevo total en la venta asociada al crédito, aqui para poder reasingnar en lugar de solo quitar o restarle al monto pagado, asi verificaremos sino es negativo abajo
+      const nuevoTotalVenta = venta.totalVenta - monto;
+
+      if (nuevoTotalPagado < 0 || nuevoTotalVenta < 0) {
+        throw new BadRequestException(
+          'El ajuste excede el total pagado o el total de la venta.',
+        );
+      }
+
+      await prisma.cuota.update({
+        where: { id: cuota.id },
+        data: {
+          fechaPago: null,
+          monto: 0,
+          estado: 'PENDIENTE',
+          comentario: null,
+        },
+      });
+
+      // Actualizar la ventaCuota restando el monto de la cuota eliminada
+      await prisma.ventaCuota.update({
+        where: { id: ventaCuotaId },
+        data: {
+          totalPagado: nuevoTotalPagado,
+        },
+      });
+
+      // Actualizar la venta asociada al crédito
+      await prisma.venta.update({
+        where: { id: venta.id },
+        data: {
+          totalVenta: nuevoTotalVenta,
+        },
+      });
+
+      let x = await prisma.sucursalSaldo.findUnique({
+        where: {
+          sucursalId: ventaCuota.sucursalId,
+        },
+      });
+
+      console.log('el monto actual de la sucursal es: ', x);
+
+      await prisma.sucursalSaldo.updateMany({
+        where: { sucursalId: ventaCuota.sucursalId },
+        data: {
+          saldoAcumulado: { decrement: monto }, // Restar el monto pagado
+          totalIngresos: { decrement: monto },
+        },
+      });
+
+      console.log(
+        'El saldo de la sucursal debería ser: ',
+        x.saldoAcumulado - monto,
+      );
+
+      return {
+        message:
+          'Pago eliminado correctamente y datos actualizados en todas las entidades.',
+      };
+    });
   }
 }

@@ -107,7 +107,9 @@ model VentaCuota {
   ventaId             Int?         @unique
   venta               Venta?       @relation(fields: [ventaId], references: [id], onDelete: Cascade)
   montoTotalConInteres Int?
+  //PAGOS QUE TIENE QUE HACER
 }
+
 
 model Cuota {
   id                  Int          @id @default(autoincrement())
@@ -115,14 +117,19 @@ model Cuota {
   ventaCuota          VentaCuota   @relation(fields: [ventaCuotaId], references: [id], onDelete: Cascade)
   monto               Float        // Monto de la cuota
   fechaVencimiento    DateTime?     // Fecha en que debe realizarse el pago
-  fechaPago           DateTime?    @default(now())
+  fechaPago           DateTime?    //ya no es default, sino que la actualizaremos cuando hagamos el pago
   estado              EstadoPago   @default(PENDIENTE) // Estado de la cuota
   usuarioId           Int?         // Usuario que recibió el pago (null si no se ha pagado)
   usuario             Usuario?     @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
   creadoEn            DateTime     @default(now())
   actualizadoEn       DateTime     @updatedAt
   comentario String?
+  //1. MONTO QUE TIENE QUE PAGAR
+  montoEsperado Float?
+  // 2. Saldo pendiente (calculable)
 }
+
+
 
 model PlantillaComprobante {
   id          Int        @id @default(autoincrement())
@@ -628,12 +635,15 @@ enum EstadoMetaCobro {
   CANCELADO
   ABIERTO
   FINALIZADO
+  CERRADO
 }
 
 enum EstadoMetaTienda {
   CANCELADO
   ABIERTO
   FINALIZADO
+  CERRADO
+
 }
 
 model DepositoCobro {

@@ -17,78 +17,64 @@ export class CajaService {
   //CERRAR EL REGISTRO DE CAJA
   async createCajaRegist(createCajaDto: CreateCajaDto) {
     try {
-      console.log('los ids de ventas son: ', createCajaDto.ventasIds);
-
       console.log(
         'Los datos para crear el cierre de caja son: ',
         createCajaDto,
       );
 
-      if (!createCajaDto.id || createCajaDto.saldoFinal === undefined) {
+      if (!createCajaDto.id) {
         throw new BadRequestException(
           'Faltan datos requeridos para cerrar el registro de caja',
         );
       }
 
-      const registUpdate = await this.prisma.registroCaja.update({
-        where: {
-          id: createCajaDto.id,
-        },
-        data: {
-          comentario: createCajaDto.comentario,
-          estado: 'CERRADO',
-          fechaCierre: new Date(),
-          saldoFinal: Number(createCajaDto.saldoFinal),
-        },
-      });
-
-      // Actualizar depósitos asociados
-      if (createCajaDto.depositosIds?.length) {
-        await this.prisma.deposito.updateMany({
-          where: { id: { in: createCajaDto.depositosIds } },
-          data: { registroCajaId: registUpdate.id },
+      return await this.prisma.$transaction(async (prisma) => {
+        const registUpdate = await prisma.registroCaja.update({
+          where: { id: createCajaDto.id },
+          data: {
+            comentario: createCajaDto.comentario,
+            estado: 'CERRADO',
+            fechaCierre: new Date(),
+          },
         });
-      }
 
-      // Actualizar egresos asociados
-      if (createCajaDto.egresosIds?.length) {
-        await this.prisma.egreso.updateMany({
-          where: { id: { in: createCajaDto.egresosIds } },
-          data: { registroCajaId: registUpdate.id },
-        });
-      }
+        if (createCajaDto.depositosIds?.length) {
+          await prisma.deposito.updateMany({
+            where: { id: { in: createCajaDto.depositosIds } },
+            data: { registroCajaId: registUpdate.id },
+          });
+        }
 
-      //ACTUALIZAR Y LIGAR LAS VENTAS
-      if (createCajaDto.ventasIds?.length) {
-        await this.prisma.venta.updateMany({
-          where: { id: { in: createCajaDto.ventasIds } },
-          data: { registroCajaId: registUpdate.id },
-        });
-      }
+        if (createCajaDto.egresosIds?.length) {
+          await prisma.egreso.updateMany({
+            where: { id: { in: createCajaDto.egresosIds } },
+            data: { registroCajaId: registUpdate.id },
+          });
+        }
 
-      // Buscar la meta más reciente no cumplida o no finalizada
-      let metaMasReciente = await this.prisma.metaUsuario.findFirst({
-        where: {
-          usuarioId: Number(createCajaDto.usuarioId),
-          cumplida: false,
-          estado: 'ABIERTO', // Meta activa
-        },
-        orderBy: {
-          fechaInicio: 'desc', // Ordena por la fecha más reciente
-        },
-      });
+        let totalVentas = 0;
+        if (createCajaDto.ventasIds?.length) {
+          const ventas = await prisma.venta.findMany({
+            where: { id: { in: createCajaDto.ventasIds } },
+            select: { totalVenta: true },
+          });
+          totalVentas = ventas.reduce(
+            (acc, venta) => acc + venta.totalVenta,
+            0,
+          );
+          await prisma.venta.updateMany({
+            where: { id: { in: createCajaDto.ventasIds } },
+            data: { registroCajaId: registUpdate.id },
+          });
+        }
 
-      // Si no encuentra una meta activa, buscar las más antiguas abiertas
-      while (!metaMasReciente) {
-        metaMasReciente = await this.prisma.metaUsuario.findFirst({
+        let metaMasReciente = await prisma.metaUsuario.findFirst({
           where: {
             usuarioId: Number(createCajaDto.usuarioId),
             cumplida: false,
-            estado: 'ABIERTO', // Meta activa
+            estado: 'ABIERTO',
           },
-          orderBy: {
-            fechaInicio: 'desc', // Ordena por la fecha más reciente
-          },
+          orderBy: { fechaInicio: 'desc' },
         });
 
         if (!metaMasReciente) {
@@ -96,56 +82,38 @@ export class CajaService {
             `No se encontró ninguna meta activa para el usuario con ID ${createCajaDto.usuarioId}`,
           );
         }
-      }
 
-      // Actualiza la meta encontrada
-      const metaTienda = await this.prisma.metaUsuario.update({
-        where: {
-          id: metaMasReciente.id,
-        },
-        data: {
-          montoActual: {
-            increment: Number(createCajaDto.saldoFinal) || 0, // Incrementa el monto actual
-          },
-        },
-      });
-
-      // Si la meta ya se cumplió, finalízala
-      // Actualiza la meta encontrada
-      // await this.prisma.metaUsuario.update({
-      //   where: {
-      //     id: metaMasReciente.id,
-      //   },
-      //   data: {
-      //     montoActual: {
-      //       increment: Number(createCajaDto.saldoFinal) || 0, // Incrementa el monto actual
-      //     },
-      //   },
-      // });
-
-      // Vuelve a consultar la meta actualizada
-      const metaActualizada = await this.prisma.metaUsuario.findUnique({
-        where: {
-          id: metaMasReciente.id,
-        },
-      });
-
-      // Si la meta ya se cumplió, finalízala
-      if (metaActualizada.montoActual >= metaActualizada.montoMeta) {
-        await this.prisma.metaUsuario.update({
+        const metaTienda = await prisma.metaUsuario.update({
           where: {
-            id: metaActualizada.id,
+            id: metaMasReciente.id,
+            estado: 'ABIERTO',
+            cumplida: false,
+            montoActual: { lt: metaMasReciente.montoMeta },
           },
-          data: {
-            cumplida: true,
-            estado: 'FINALIZADO',
-            fechaCumplida: new Date(),
-          },
+          data: { montoActual: { increment: totalVentas } },
         });
-      }
 
-      console.log('El registro de meta de tienda actualizado es: ', metaTienda);
-      return registUpdate;
+        const metaActualizada = await prisma.metaUsuario.findUnique({
+          where: { id: metaMasReciente.id },
+        });
+
+        if (metaActualizada.montoActual >= metaActualizada.montoMeta) {
+          await prisma.metaUsuario.update({
+            where: { id: metaActualizada.id },
+            data: {
+              cumplida: true,
+              estado: 'FINALIZADO',
+              fechaCumplida: new Date(),
+            },
+          });
+        }
+
+        console.log(
+          'El registro de meta de tienda actualizado es: ',
+          metaTienda,
+        );
+        return registUpdate;
+      });
     } catch (error) {
       console.error('Error al cerrar el registro de caja:', error);
       throw new BadRequestException('Error al cerrar el registro de caja');

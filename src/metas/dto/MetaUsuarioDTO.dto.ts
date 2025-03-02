@@ -1,3 +1,4 @@
+import { EstadoMetaTienda } from '@prisma/client';
 import {
   IsInt,
   IsPositive,
@@ -7,6 +8,7 @@ import {
   IsString,
   MinLength,
   MaxLength,
+  IsEnum,
 } from 'class-validator';
 
 export class CreateMetaUsuarioDto {
@@ -45,4 +47,8 @@ export class CreateMetaUsuarioDto {
   @IsString()
   @MaxLength(100)
   tituloMeta?: string; // (Opcional) Título descriptivo de la meta
+
+  @IsOptional()
+  @IsEnum(EstadoMetaTienda)
+  EstadoMetaTienda: EstadoMetaTienda;
 }

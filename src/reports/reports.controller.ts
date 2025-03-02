@@ -102,4 +102,43 @@ export class ReportsController {
 
     res.send(buffer);
   }
+
+  //Metas REPORTE
+  //VENTAS REPORTE
+  @Get('/metas/excel')
+  async getMetasExcel(
+    @Res() res: Response,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('minTotal') minTotal?: string,
+    @Query('maxTotal') maxTotal?: string,
+  ) {
+    // Proporcionar valores predeterminados si no se envían
+    const min = minTotal ? parseFloat(minTotal) : 0;
+    const max = maxTotal ? parseFloat(maxTotal) : Infinity;
+
+    if (isNaN(min) || isNaN(max)) {
+      throw new BadRequestException(
+        'Los valores de minTotal o maxTotal no son válidos.',
+      );
+    }
+
+    const buffer = await this.reportsService.generarMetasReport(
+      from,
+      to,
+      // min,
+      // max,
+    );
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename=ventas-diarias.xlsx',
+    );
+
+    res.send(buffer);
+  }
 }
