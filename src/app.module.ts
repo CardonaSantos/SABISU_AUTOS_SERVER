@@ -35,6 +35,7 @@ import { SaleDeletedModule } from './sale-deleted/sale-deleted.module';
 import { CuotasModule } from './cuotas/cuotas.module';
 import { RepairModule } from './repair/repair.module';
 import { MetasModule } from './metas/metas.module';
+import { EmpresaModule } from './crm/empresa/empresa.module';
 
 @Module({
   imports: [
@@ -75,6 +76,7 @@ import { MetasModule } from './metas/metas.module';
     CuotasModule,
     RepairModule,
     MetasModule,
+    EmpresaModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -35,6 +35,7 @@ export class CajaService {
             comentario: createCajaDto.comentario,
             estado: 'CERRADO',
             fechaCierre: new Date(),
+            saldoFinal: Number(createCajaDto.saldoFinal),
           },
         });
 
