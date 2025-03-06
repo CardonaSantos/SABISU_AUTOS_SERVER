@@ -1,4 +1,4 @@
-import { EstadoGarantia } from '@prisma/client';
+import { EstadoGarantia } from 'prisma/generated/pos';
 import {
   IsInt,
   IsOptional,

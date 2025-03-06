@@ -1,4 +1,4 @@
-import { EstadoTicket } from '@prisma/client';
+import { EstadoTicket } from 'prisma/generated/pos';
 import { IsDateString, IsEnum, IsOptional, IsString } from 'class-validator';
 
 export class UpdateTicketDto {

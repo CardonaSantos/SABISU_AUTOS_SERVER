@@ -6,7 +6,7 @@ import {
   IsEnum,
   Min,
 } from 'class-validator';
-import { Rol } from '@prisma/client';
+import { Rol } from 'prisma/generated/pos';
 
 export class AdminUpdateUserDto {
   // Datos del usuario a editar

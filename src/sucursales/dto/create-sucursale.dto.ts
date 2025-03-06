@@ -1,4 +1,4 @@
-import { TipoSucursal } from '@prisma/client';
+import { TipoSucursal } from 'prisma/generated/pos';
 import {
   IsString,
   IsOptional,
