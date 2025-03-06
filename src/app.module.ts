@@ -35,7 +35,8 @@ import { SaleDeletedModule } from './sale-deleted/sale-deleted.module';
 import { CuotasModule } from './cuotas/cuotas.module';
 import { RepairModule } from './repair/repair.module';
 import { MetasModule } from './metas/metas.module';
-import { EmpresaModule } from './crm/empresa/empresa.module';
+// import { EmpresaModule } from './crm/empresa/empresa.module';
+import { EmpresaModule } from './CRM/empresa/empresa.module';
 
 @Module({
   imports: [
