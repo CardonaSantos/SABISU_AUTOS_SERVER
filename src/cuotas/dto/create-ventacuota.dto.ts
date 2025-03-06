@@ -9,7 +9,7 @@ import {
   IsNumber,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { EstadoCuota } from '@prisma/client';
+import { EstadoCuota } from 'prisma/generated/pos';
 
 export class CreateVentaCuotaDto {
   @IsInt()

@@ -1,7 +1,7 @@
 import { PartialType } from '@nestjs/mapped-types';
 import { CreateAjusteStockDto } from './create-ajuste-stock.dto';
 import { IsEnum, IsInt, IsNumber, IsOptional, IsString } from 'class-validator';
-import { TipoAjuste } from '@prisma/client';
+import { TipoAjuste } from 'prisma/generated/pos';
 
 export class UpdateAjusteStockDto {
   @IsInt()

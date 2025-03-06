@@ -11,7 +11,7 @@ import {
 import { NotificationService } from './notification.service';
 import { CreateNotificationDto } from './dto/create-notification.dto';
 import { UpdateNotificationDto } from './dto/update-notification.dto';
-import { TipoNotificacion } from '@prisma/client';
+// import { TipoNotificacion } from '@prisma/client';
 
 @Controller('notification')
 export class NotificationController {

@@ -2,7 +2,7 @@ import { PartialType } from '@nestjs/mapped-types';
 import { CreateMetaDto } from './create-meta.dto';
 import { CreateMetaUsuarioDto } from './MetaUsuarioDTO.dto';
 import { IsEnum, IsOptional, IsPositive, IsString } from 'class-validator';
-import { EstadoMetaCobro } from '@prisma/client';
+import { EstadoMetaCobro } from 'prisma/generated/pos';
 
 export class UpdateMetaCobroDto {
   //   @IsDateString()

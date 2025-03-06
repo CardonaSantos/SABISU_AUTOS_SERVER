@@ -7,7 +7,7 @@ import {
   IsNotEmpty,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { EstadoPago } from '@prisma/client';
+import { EstadoPago } from 'prisma/generated/pos';
 
 // Enum para el estado de la cuota
 

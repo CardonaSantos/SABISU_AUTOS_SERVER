@@ -5,7 +5,7 @@ import { UserService } from 'src/user/user.service';
 import { JwtService } from '@nestjs/jwt';
 
 import * as bcrypt from 'bcryptjs';
-import { Rol } from '@prisma/client';
+// import { Rol } from '@prisma/client';
 
 interface Usuario {
   nombre: string;

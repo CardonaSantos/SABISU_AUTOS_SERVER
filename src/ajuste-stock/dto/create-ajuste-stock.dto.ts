@@ -1,5 +1,5 @@
 import { IsInt, IsOptional, IsString, IsEnum } from 'class-validator';
-import { TipoAjuste } from '@prisma/client';
+import { TipoAjuste } from 'prisma/generated/pos';
 
 export class CreateAjusteStockDto {
   @IsInt()

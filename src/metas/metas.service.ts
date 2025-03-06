@@ -12,7 +12,7 @@ import { CreateMetaCobrosDto } from './dto/MetaCobrosDTO.dto';
 import { CreateDepositoCobroDto } from './dto/DepositoCobroDTO.dto';
 import * as bcrypt from 'bcryptjs';
 import { UpdateMetaCobroDto } from './dto/update-meta-cobro.dto';
-import { EstadoMetaCobro, EstadoMetaTienda } from '@prisma/client';
+import { EstadoMetaCobro, EstadoMetaTienda } from 'prisma/generated/pos';
 @Injectable()
 export class MetasService {
   constructor(private readonly prisma: PrismaService) {}
