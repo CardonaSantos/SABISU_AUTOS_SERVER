@@ -1,4 +1,4 @@
-import { EstadoCuota } from 'prisma/generated/pos';
+import { EstadoCuota } from '@prisma/client';
 import { IsEnum, IsNumber, IsOptional, IsString } from 'class-validator';
 
 export class CloseCreditDTO {

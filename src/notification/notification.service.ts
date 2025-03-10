@@ -6,7 +6,7 @@ import {
 import { UpdateNotificationDto } from './dto/update-notification.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { WebsocketGateway } from 'src/web-sockets/websocket.gateway';
-import { TipoNotificacion } from 'prisma/generated/pos';
+import { TipoNotificacion } from '@prisma/client';
 import { NotificationToEmit } from 'src/web-sockets/Types/NotificationTypeSocket';
 import { nuevaSolicitud } from 'src/web-sockets/Types/SolicitudType';
 

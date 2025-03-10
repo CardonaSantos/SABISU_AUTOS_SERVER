@@ -1,4 +1,4 @@
-import { MetodoPago } from 'prisma/generated/pos';
+import { MetodoPago } from '@prisma/client';
 import {
   IsDate,
   IsArray,

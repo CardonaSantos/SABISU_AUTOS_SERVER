@@ -1,4 +1,4 @@
-import { EstadoGarantia } from 'prisma/generated/pos';
+import { EstadoGarantia } from '@prisma/client';
 import { IsInt, IsOptional, IsString, IsNotEmpty } from 'class-validator';
 
 export class CreateWarrantyRecordDto {

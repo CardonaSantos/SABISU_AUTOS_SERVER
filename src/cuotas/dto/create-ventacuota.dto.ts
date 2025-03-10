@@ -9,7 +9,7 @@ import {
   IsNumber,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { EstadoCuota } from 'prisma/generated/pos';
+import { EstadoCuota } from '@prisma/client';
 
 export class CreateVentaCuotaDto {
   @IsInt()
@@ -42,7 +42,7 @@ export class CreateVentaCuotaDto {
   cuotasTotales: number;
 
   @IsDateString()
-  fechaInicio: string;
+  fechaInicio: Date;
 
   @IsEnum(EstadoCuota)
   estado: EstadoCuota;
@@ -60,7 +60,7 @@ export class CreateVentaCuotaDto {
 
   @IsDateString()
   @IsOptional()
-  fechaContrato?: string;
+  fechaContrato?: Date;
 
   @IsNumber()
   @IsOptional()

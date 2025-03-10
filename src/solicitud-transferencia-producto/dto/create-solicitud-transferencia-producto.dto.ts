@@ -1,4 +1,4 @@
-import { EstadoSolicitudTransferencia } from 'prisma/generated/pos';
+import { EstadoSolicitudTransferencia } from '@prisma/client';
 import { IsInt, IsOptional, IsString, IsEnum } from 'class-validator';
 
 export class CreateSolicitudTransferenciaProductoDto {

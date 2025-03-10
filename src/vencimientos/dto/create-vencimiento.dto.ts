@@ -1,4 +1,4 @@
-import { EstadoVencimiento } from 'prisma/generated/pos';
+import { EstadoVencimiento } from '@prisma/client';
 import { IsEnum, IsNumber, IsOptional, IsString } from 'class-validator';
 
 export class CreateVencimientoDto {

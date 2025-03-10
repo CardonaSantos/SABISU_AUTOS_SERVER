@@ -1,4 +1,4 @@
-import { EstadoReparacion } from 'prisma/generated/pos';
+import { EstadoReparacion } from '@prisma/client';
 import {
   IsInt,
   IsOptional,

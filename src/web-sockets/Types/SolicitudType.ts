@@ -1,4 +1,4 @@
-import { EstadoSolicitud } from 'prisma/generated/pos';
+import { EstadoSolicitud } from '@prisma/client';
 
 export interface nuevaSolicitud {
   id: number;

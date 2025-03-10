@@ -1,11 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { CreateEmpresaDto } from './dto/create-empresa.dto';
 import { UpdateEmpresaDto } from './dto/update-empresa.dto';
-import { PrismaCrmService } from 'src/prisma/crm/crm.service';
+// import { PrismaCrmService } from 'src/prisma/crm/crm.service';
 
 @Injectable()
 export class EmpresaService {
-  constructor(private readonly CrmPrismaService: PrismaCrmService) {}
+  constructor() {}
 
   async create(createEmpresaDto: CreateEmpresaDto) {
     return 'This action adds a new empresa';

@@ -6,7 +6,7 @@ import {
 import { CreateAjusteStockDto } from './dto/create-ajuste-stock.dto';
 import { UpdateAjusteStockDto } from './dto/update-ajuste-stock.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { TipoAjuste } from 'prisma/generated/pos';
+import { TipoAjuste } from '@prisma/client';
 
 @Injectable()
 export class AjusteStockService {

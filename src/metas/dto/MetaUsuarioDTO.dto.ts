@@ -1,4 +1,4 @@
-import { EstadoMetaTienda } from 'prisma/generated/pos';
+import { EstadoMetaTienda } from '@prisma/client';
 import {
   IsInt,
   IsPositive,

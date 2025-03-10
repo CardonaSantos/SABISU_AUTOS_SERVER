@@ -1,4 +1,4 @@
-import { TipoNotificacion } from 'prisma/generated/pos';
+import { TipoNotificacion } from '@prisma/client';
 import {
   IsArray,
   IsEnum,
