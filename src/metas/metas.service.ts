@@ -643,7 +643,8 @@ export class MetasService {
 
   async updateMetaTienda(id: number, updateMetaDto: UpdateMetaDto) {
     try {
-      const { tituloMeta, EstadoMetaTienda, montoMeta } = updateMetaDto;
+      const { tituloMeta, EstadoMetaTienda, montoMeta, montoActual } =
+        updateMetaDto;
       const estado = EstadoMetaTienda as EstadoMetaTienda;
 
       await this.prisma.$transaction(async (tx) => {
@@ -655,22 +656,33 @@ export class MetasService {
           throw new NotFoundException('Error al encontrar el registro de meta');
         }
 
+        // Verificar si el montoActual fue enviado y si realmente cambió
+        const montoActualFinal =
+          montoActual !== undefined ? montoActual : metaFind.montoActual;
+
         await tx.metaUsuario.update({
           where: { id: metaFind.id },
           data: {
-            // estado: EstadoMetaTienda,
-            estado: estado,
-
+            estado,
             montoMeta: Number(montoMeta),
+            montoActual: montoActualFinal,
             tituloMeta,
           },
         });
       });
 
-      return 'Meta actualizada'; // 🔹 Mueve el return aquí
+      console.log(
+        'Los datos del cambio son: ',
+        tituloMeta,
+        EstadoMetaTienda,
+        montoMeta,
+        montoActual,
+      );
+
+      return 'Meta actualizada';
     } catch (error) {
       console.error('Error en updateMetaTienda:', error);
-      throw new Error('No se pudo actualizar la meta'); // 🔹 Lanza el error para que se maneje correctamente
+      throw new Error('No se pudo actualizar la meta');
     }
   }
 

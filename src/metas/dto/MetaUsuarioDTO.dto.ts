@@ -9,6 +9,7 @@ import {
   MinLength,
   MaxLength,
   IsEnum,
+  IsNumber,
 } from 'class-validator';
 
 export class CreateMetaUsuarioDto {
@@ -51,4 +52,8 @@ export class CreateMetaUsuarioDto {
   @IsOptional()
   @IsEnum(EstadoMetaTienda)
   EstadoMetaTienda: EstadoMetaTienda;
+
+  @IsNumber()
+  @IsOptional()
+  montoActual: number;
 }

@@ -64,7 +64,6 @@ export class UserService {
     }
   }
 
-  //Encontrar usuarios simples
   async findAll() {
     try {
       const users = await this.prisma.usuario.findMany({});
@@ -75,7 +74,6 @@ export class UserService {
     }
   }
 
-  //Encontrar usuarios simples
   // Encontrar usuarios simples con notificaciones
   async findAllUserWithNot() {
     try {
