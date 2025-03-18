@@ -72,7 +72,7 @@ export class CajaService {
         let metaMasReciente = await prisma.metaUsuario.findFirst({
           where: {
             usuarioId: Number(createCajaDto.usuarioId),
-            cumplida: false,
+            // cumplida: false,
             estado: 'ABIERTO',
           },
           orderBy: { fechaInicio: 'desc' },
