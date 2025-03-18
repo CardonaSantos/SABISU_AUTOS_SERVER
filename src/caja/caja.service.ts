@@ -88,7 +88,7 @@ export class CajaService {
           where: {
             id: metaMasReciente.id,
             estado: 'ABIERTO',
-            cumplida: false,
+            // cumplida: false,
             montoActual: { lt: metaMasReciente.montoMeta },
           },
           data: { montoActual: { increment: totalVentas } },
