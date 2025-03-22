@@ -644,6 +644,7 @@ enum EstadoMetaTienda {
   ABIERTO
   FINALIZADO
   CERRADO
+
 }
 
 model DepositoCobro {
