@@ -670,16 +670,69 @@ export class CuotasService {
     }
   }
 
+  // async registerNewPay(createCuotaDto: CuotaDto) {
+  //   try {
+  //     // const hoy = dayjs();
+  //     const cuotaID = createCuotaDto.ventaCuotaId;
+  //     const CreditoID = createCuotaDto.CreditoID;
+  //     // 1. Crear el registro del pago
+  //     const cuotaA_Actualizar = await this.prisma.cuota.update({
+  //       where: {
+  //         id: cuotaID,
+  //       },
+  //       data: {
+  //         monto: createCuotaDto.monto,
+  //         estado: createCuotaDto.estado,
+  //         usuarioId: createCuotaDto.usuarioId,
+  //         comentario: createCuotaDto.comentario,
+  //         fechaPago: new Date(),
+  //       },
+  //     });
+
+  //     // 2. Actualizar el total pagado en la VentaCuota
+  //     const ventaCuotaActualizada = await this.prisma.ventaCuota.update({
+  //       where: {
+  //         id: createCuotaDto.CreditoID,
+  //       },
+  //       data: {
+  //         totalPagado: {
+  //           increment: createCuotaDto.monto,
+  //         },
+  //       },
+  //       include: {
+  //         venta: true, // Incluir la venta asociada
+  //       },
+  //     });
+
+  //     if (!ventaCuotaActualizada) {
+  //       throw new NotFoundException('Registro no encontrado');
+  //     }
+
+  //     // 3. Actualizar el totalVenta en la Venta asociada (si existe)
+  //     if (ventaCuotaActualizada.venta) {
+  //       await this.prisma.venta.update({
+  //         where: {
+  //           id: ventaCuotaActualizada.venta.id, // Usar la relación directa con Venta
+  //         },
+  //         data: {
+  //           totalVenta: {
+  //             increment: createCuotaDto.monto,
+  //           },
+  //         },
+  //       });
+  //     }
+  //     return cuotaA_Actualizar;
+  //   } catch (error) {
+  //     console.error('Error en registerNewPay:', error);
+  //     throw new BadRequestException('Error al registrar pago de cuota');
+  //   }
+  // }
+
   async registerNewPay(createCuotaDto: CuotaDto) {
     try {
-      // const hoy = dayjs();
-      const cuotaID = createCuotaDto.ventaCuotaId;
-      const CreditoID = createCuotaDto.CreditoID;
-      // 1. Crear el registro del pago
+      // 1. Update the cuota (payment) record
       const cuotaA_Actualizar = await this.prisma.cuota.update({
-        where: {
-          id: cuotaID,
-        },
+        where: { id: createCuotaDto.ventaCuotaId },
         data: {
           monto: createCuotaDto.monto,
           estado: createCuotaDto.estado,
@@ -689,48 +742,72 @@ export class CuotasService {
         },
       });
 
-      // 2. Actualizar el total pagado en la VentaCuota
+      // 2. Update the total paid in VentaCuota
       const ventaCuotaActualizada = await this.prisma.ventaCuota.update({
-        where: {
-          id: createCuotaDto.CreditoID,
-        },
+        where: { id: createCuotaDto.CreditoID },
         data: {
-          totalPagado: {
-            increment: createCuotaDto.monto,
-          },
+          totalPagado: { increment: createCuotaDto.monto },
         },
-        include: {
-          venta: true, // Incluir la venta asociada
-        },
+        include: { venta: true },
       });
 
       if (!ventaCuotaActualizada) {
         throw new NotFoundException('Registro no encontrado');
       }
 
-      // 3. Actualizar el totalVenta en la Venta asociada (si existe)
+      // 3. Update the totalVenta in the associated Venta (if exists)
       if (ventaCuotaActualizada.venta) {
         await this.prisma.venta.update({
-          where: {
-            id: ventaCuotaActualizada.venta.id, // Usar la relación directa con Venta
-          },
+          where: { id: ventaCuotaActualizada.venta.id },
           data: {
-            totalVenta: {
-              increment: createCuotaDto.monto,
-            },
+            totalVenta: { increment: createCuotaDto.monto },
           },
         });
       }
-      // 4. Verificar si el crédito está completamente pagado
-      // if (
-      //   ventaCuotaActualizada.totalPagado + createCuotaDto.monto >=
-      //   ventaCuotaActualizada.totalVenta
-      // ) {
-      //   await this.prisma.ventaCuota.update({
-      //     where: { id: createCuotaDto.ventaCuotaId },
-      //     data: { estado: 'PAGADA' },
-      //   });
-      // }
+
+      // 4. Search for the most recent active meta for the user
+      let metaMasReciente = await this.prisma.metaUsuario.findFirst({
+        where: {
+          usuarioId: Number(createCuotaDto.usuarioId),
+          estado: { in: ['ABIERTO', 'FINALIZADO'] },
+        },
+        orderBy: { fechaInicio: 'desc' },
+      });
+
+      // If a meta is found, update its montoActual
+      if (metaMasReciente) {
+        const metaTienda = await this.prisma.metaUsuario.update({
+          where: {
+            id: metaMasReciente.id,
+            estado: { in: ['ABIERTO', 'FINALIZADO'] },
+          },
+          data: { montoActual: { increment: createCuotaDto.monto } },
+        });
+
+        const metaActualizada = await this.prisma.metaUsuario.findUnique({
+          where: { id: metaMasReciente.id },
+        });
+
+        if (metaActualizada.montoActual >= metaActualizada.montoMeta) {
+          await this.prisma.metaUsuario.update({
+            where: { id: metaActualizada.id },
+            data: {
+              cumplida: true,
+              estado: 'FINALIZADO',
+              fechaCumplida: new Date(),
+            },
+          });
+        }
+        console.log(
+          'El registro de meta de tienda actualizado es: ',
+          metaTienda,
+        );
+      } else {
+        console.warn(
+          `No se encontró ninguna meta activa para el usuario con ID ${createCuotaDto.usuarioId}`,
+        );
+        // Continue normally without updating any meta
+      }
 
       return cuotaA_Actualizar;
     } catch (error) {
