@@ -578,6 +578,8 @@ model Usuario {
   fecha_actualizacion DateTime @default(now()) // Esto asigna automáticamente la fecha actual.
   VentaEliminada VentaEliminada[]
 
+  ventas             Venta[]            // Ventas realizadas por el usuario
+
   VentaCuota VentaCuota[]
 
   Cuota Cuota[]
@@ -787,6 +789,9 @@ model Venta {
   registroCaja      RegistroCaja? @relation(fields: [registroCajaId], references: [id], onDelete: SetNull)
   // Relación opcional con una VentaCuota
   ventaCuota          VentaCuota?
+    //relacion con venta opcional
+  usuarioId           Int?         // Relación con el usuario que realizó la venta
+  usuario             Usuario?     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 }
 
 model TransferenciaProducto {
