@@ -28,6 +28,10 @@ export class UpdateProductDto {
   @IsOptional()
   codigoProducto: string; // Código único del producto
 
+  @IsInt()
+  @IsOptional()
+  stockMinimo: number;
+
   @IsString()
   @IsOptional()
   descripcion: string; // Código único del producto
@@ -46,4 +50,10 @@ export class UpdateProductDto {
 
   @IsInt()
   usuarioId: number;
+
+  @IsOptional()
+  codigoProveedor: string; // Código del proveedor del producto
+
+  @IsArray()
+  imagenes: string[];
 }

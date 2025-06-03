@@ -57,4 +57,8 @@ export class CreateVentaDto {
   @IsString()
   @IsOptional()
   imei?: string; // Campo opcional para IMEI
+
+  @IsString()
+  @IsOptional()
+  observaciones?: string;
 }

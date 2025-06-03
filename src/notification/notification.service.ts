@@ -64,7 +64,6 @@ export class NotificationService {
       };
 
       // Emitir la notificación a cada usuario
-      // Emitir la notificación a todos los usuarios
       usuarioIds.forEach((usuarioId) => {
         this.webSocketService.handleEnviarNotificacion(
           notificationToEmit,

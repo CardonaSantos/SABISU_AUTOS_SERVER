@@ -4,17 +4,22 @@ import { UpdateVencimientoDto } from './dto/update-vencimiento.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { NotificationService } from 'src/notification/notification.service';
+import * as dayjs from 'dayjs';
+import * as utc from 'dayjs/plugin/utc';
+import * as timezone from 'dayjs/plugin/timezone';
+import 'dayjs/locale/es-mx';
+
+dayjs.extend(utc);
+dayjs.locale('es-mx');
+dayjs.extend(timezone);
 
 //formato UTC
-const formatFecha = (fecha: string | Date): string => {
-  const opciones: Intl.DateTimeFormatOptions = {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    timeZone: 'UTC', // Usamos UTC para mantener la consistencia
-  };
-  return new Date(fecha).toLocaleDateString('es-MX', opciones);
-};
+// Función formatFecha corregida:
+const formatFecha = (fecha: Date): string =>
+  dayjs(fecha)
+    .tz('America/Guatemala', true) // <-- Tercer parámetro es el booleano
+    .locale('es')
+    .format('D [de] MMMM [de] YYYY');
 
 @Injectable()
 export class VencimientosService {
@@ -24,103 +29,108 @@ export class VencimientosService {
     private readonly notificationService: NotificationService,
   ) {}
 
-  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
-  handleCronVencimientos() {
-    this.verificarYCrearVencimientos();
+  @Cron(CronExpression.EVERY_10_SECONDS, {
+    name: 'vencimientos.midnightGuate',
+    timeZone: 'America/Guatemala',
+  })
+  async handleCronVencimientos() {
+    await this.procesarVencimientos();
   }
 
-  async verificarYCrearVencimientos() {
-    console.log('EJECUTANDO TAREA');
+  private async procesarVencimientos() {
+    const hoy = dayjs().tz('America/Guatemala').startOf('day');
+    const limite = hoy.add(15, 'day').endOf('day');
 
-    try {
-      const hoy = new Date();
-      hoy.setUTCHours(0, 0, 0, 0);
+    console.log('🔍 Buscando vencimientos entre:', {
+      desde: dayjs(hoy.toISOString()).format('DD MM YYYY'),
+      hasta: dayjs(limite.toISOString()).format('DD MM YYYY'),
+    });
 
-      const fechaLimite = new Date(hoy);
-      fechaLimite.setDate(hoy.getDate() + 10);
-      fechaLimite.setUTCHours(23, 59, 59, 999);
-
-      // Obtener los stocks que vencen dentro de los próximos 10 días
-      const proximosVencimientos = await this.prisma.stock.findMany({
-        where: {
-          fechaVencimiento: {
-            gte: hoy,
-            lte: fechaLimite,
-          },
+    const stocks = await this.prisma.stock.findMany({
+      where: {
+        fechaVencimiento: {
+          gte: hoy.toDate(),
+          lte: limite.toDate(),
         },
-      });
+      },
+    });
+    const admins = await this.prisma.usuario.findMany({
+      where: { rol: 'ADMIN' },
+    });
 
-      console.log('Los próximos vencimientos son:', proximosVencimientos);
-
-      const admins = await this.prisma.usuario.findMany({
-        where: { rol: 'ADMIN' },
-      });
-      console.log('Los admins son: ', admins);
-
-      for (const stock of proximosVencimientos) {
-        // Verificar si ya existe un vencimiento para este stock
-        const vencimientoExistente = await this.prisma.vencimiento.findFirst({
-          where: { stockId: stock.id },
-        });
-
-        //SINO HAY UN REGISTRO DE VENCIMINTO, TENEMOS QUE HACER UNO
-        if (!vencimientoExistente) {
-          const producto = await this.prisma.producto.findUnique({
-            where: { id: stock.productoId },
-          });
-          if (!producto) continue;
-
-          const registroVencimiento = await this.prisma.vencimiento.create({
-            data: {
-              fechaVencimiento: stock.fechaVencimiento,
-              descripcion: `El producto ${producto.nombre} tiene una instancia de Stock que vence el día ${formatFecha(stock.fechaVencimiento)}.`,
-
-              stockId: stock.id,
-              estado: 'PENDIENTE',
-            },
-          });
-          console.log('Vencimiento creado:', registroVencimiento);
-
-          for (const admin of admins) {
-            const notificationExist = await this.prisma.notificacion.findFirst({
-              where: {
-                referenciaId: stock.id,
-                AND: {
-                  notificacionesUsuarios: {
-                    some: {
-                      usuarioId: admin.id,
-                    },
-                  },
-                },
-              },
-            });
-
-            if (!notificationExist) {
-              console.log('Creando notificación para el admin:', admin.id);
-
-              await this.notificationService.createOneNotification(
-                // `El producto ${producto.nombre} tiene una instancia de Stock que vencerá el ${stock.fechaVencimiento}`,
-                `El producto ${producto.nombre} tiene una instancia de Stock que vencerá el ${formatFecha(stock.fechaVencimiento)}`,
-
-                null,
-                admin.id,
-                'VENCIMIENTO',
-                stock.id,
-              );
-            } else {
-              console.log('La notificación ya existe para el stock:', stock.id);
-            }
-          }
-        } else {
-          console.log(
-            'El vencimiento ya existe para el stock y por lo tanto la notificación:',
-            stock.id,
-          );
-        }
-      }
-    } catch (error) {
-      console.error('Error al verificar vencimientos:', error);
+    for (const stock of stocks) {
+      await this.procesarStock(stock, admins, hoy);
     }
+  }
+
+  private async procesarStock(stock, admins, hoy) {
+    const ya = await this.prisma.vencimiento.findFirst({
+      where: { stockId: stock.id },
+    });
+    if (ya) return;
+
+    const producto = await this.prisma.producto.findUnique({
+      where: { id: stock.productoId },
+    });
+    if (!producto) return;
+
+    // const localExp = dayjs
+    //   .tz(stock.fechaVencimiento, 'America/Guatemala')
+    //   .startOf('day');
+    // Dentro de procesarStock:
+    const localExp = dayjs(stock.fechaVencimiento)
+      .tz('America/Guatemala', true) // <-- Usar booleano directamente
+      .startOf('day');
+
+    const fechaCruda = new Date(stock.fechaVencimiento);
+    const fechaSinFormato = stock.fechaVencimiento;
+
+    console.log('la fecha cruda es: ', fechaCruda);
+    console.log('la fechaSinFormatoa es: ', fechaSinFormato);
+
+    console.log(
+      'La fecha que vence es: ',
+      dayjs(localExp).format('DD MM YYYY'),
+    );
+
+    const diasFaltan = localExp.diff(hoy, 'day');
+
+    const formattedDate = localExp
+      .locale('es-mx')
+      .format('D [de] MMMM [de] YYYY');
+
+    const venc = await this.prisma.vencimiento.create({
+      data: {
+        fechaVencimiento: stock.fechaVencimiento,
+        descripcion: `El producto ${producto.nombre} vence en ${diasFaltan} días (el ${formattedDate}).`,
+        stockId: stock.id,
+        estado: 'PENDIENTE',
+      },
+    });
+    console.log('Vencimiento creado:', venc.id);
+
+    await Promise.all(
+      admins.map((adm) => this.notificarAdmin(adm.id, stock, producto)),
+    );
+  }
+
+  private async notificarAdmin(adminId: number, stock, producto) {
+    const existe = await this.prisma.notificacion.findFirst({
+      where: {
+        referenciaId: stock.id,
+        notificacionesUsuarios: { some: { usuarioId: adminId } },
+      },
+    });
+    if (existe) return;
+
+    await this.notificationService.createOneNotification(
+      `El producto ${producto.nombre} vence el ${formatFecha(stock.fechaVencimiento)}`,
+      null,
+      adminId,
+      'VENCIMIENTO',
+      stock.id,
+    );
+    console.log(`Notificación enviada a admin ${adminId}`);
   }
 
   create(createVencimientoDto: CreateVencimientoDto) {
@@ -132,6 +142,11 @@ export class VencimientosService {
       const registrosVencimiento = await this.prisma.vencimiento.findMany({
         orderBy: {
           fechaCreacion: 'desc',
+        },
+        where: {
+          stock: {
+            isNot: null,
+          },
         },
         include: {
           stock: {

@@ -310,7 +310,6 @@ model Notificacion {
   Usuario Usuario[] @relation("Destinatario")
 }
 
-
 model NotificacionesUsuarios {
   id                Int                @id @default(autoincrement())
   usuarioId         Int                // Usuario que recibe la notificación
@@ -375,7 +374,130 @@ model Producto {
   VentaEliminadaProducto VentaEliminadaProducto[]
 
   Reparacion Reparacion[]
+
+  stockThreshold StockThreshold? // no array
+  codigoProveedor  String?   @unique
+
+  lineas RequisicionLinea[]
+
+  ResumenVenta ResumenVenta[]
+
+  detallesResumenVenta DetalleResumenVenta[]
+
+  imagenesProducto ImagenProducto[]
 }
+
+model ImagenProducto {
+  id          Int      @id @default(autoincrement())
+  url         String   // ruta o URL de la imagen
+  public_id   String?  // ID público si se usa un servicio de almacenamiento externo  
+  altTexto    String?  // texto alternativo para accesibilidad
+  creadoEn    DateTime @default(now())
+  // relación inversa
+  producto    Producto @relation(fields: [productoId], references: [id])
+  productoId  Int
+
+  @@index([productoId])
+}
+
+model StockThreshold {
+  id           Int       @id @default(autoincrement())
+  producto     Producto  @relation(fields: [productoId], references: [id])
+  productoId   Int       @unique    // fuerza la relación 1:1
+  stockMinimo  Int       @default(0)
+  creadoEn     DateTime  @default(now())
+  actualizadoEn DateTime @updatedAt
+}
+
+
+
+model Requisicion {
+  id             Int                  @id @default(autoincrement())
+  folio          String               @unique                  // un identificador legible (p. ej. “REQ-2025-0001”)
+  fecha          DateTime             @default(now())          // cuándo se generó
+  sucursalId     Int
+  sucursal       Sucursal             @relation(fields: [sucursalId], references: [id])
+  usuarioId      Int
+  usuario        Usuario              @relation(fields: [usuarioId], references: [id])
+  estado         RequisicionEstado    @default(PENDIENTE)       // PENDIENTE, ENVIADA, COMPLETADA…
+  observaciones  String?                                       // notas adicionales
+  totalLineas    Int                  @default(0)               // número de líneas (se puede calcular en un hook)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  lineas         RequisicionLinea[]   // relación 1-N
+  totalRequisicion Float?
+}
+
+model RequisicionLinea {
+  id               Int         @id @default(autoincrement())
+  requisicionId    Int
+  requisicion      Requisicion @relation(fields: [requisicionId], references: [id], onDelete: Cascade)
+  productoId       Int
+  producto         Producto    @relation(fields: [productoId], references: [id])
+  cantidadActual   Int         // stock al momento de generar
+  stockMinimo      Int         // umbral usado para decidir inclusión
+  cantidadSugerida Int         // (stockMinimo − cantidadActual) o valor que decidas pedir
+  precioUnitario   Float?      // opcional: precio de compra sugerido o último precio conocido
+  createdAt        DateTime    @default(now())
+  updatedAt       DateTime     @updatedAt
+  @@index([requisicionId])
+}
+
+enum RequisicionEstado {
+  BORRADOR     // aún no se ha generado formalmente
+  PENDIENTE    // creada y a la espera de aprobar/envío
+  APROBADA     // validada internamente y lista para enviar a compras
+  ENVIADA      // ya fue enviada al área de compras/proveedor
+  RECIBIDA     // confirmada la recepción parcial o total de los productos
+  COMPLETADA   // todas las líneas recibidas y la requisición cerrada
+  CANCELADA    // anulada por algún motivo
+}
+
+
+/// Tipo de período que resume la venta
+enum ResumenPeriodo {
+  DIARIO
+  SEMANAL
+  MENSUAL
+  CUSTOM
+}
+
+model ResumenVenta {
+  id                  Int                   @id @default(autoincrement())
+  titulo              String?
+  sucursalId          Int?                  // si quieres por sucursal
+  sucursal            Sucursal?             @relation(fields: [sucursalId], references: [id])
+  usuarioId           Int?
+  usuario             Usuario?              @relation(fields: [usuarioId], references: [id])
+  periodo             ResumenPeriodo        @default(DIARIO)
+  fechaInicio         DateTime              // p.ej. para semanal: lunes de la semana
+  fechaFin            DateTime              // p.ej. semanal: domingo de la semana
+  totalVentas         Float                 // suma de montos
+  totalTransacciones  Int                   // número de tickets/facturas
+  unidadesVendidas    Int                   // suma de unidades vendidas
+  ticketPromedio      Float?                // totalVentas / totalTransacciones
+  productoTopId       Int?                  // producto con más ventas en el período
+  productoTop         Producto?             @relation(fields: [productoTopId], references: [id])
+  cantidadProductoTop  Int?
+  creadoEn            DateTime              @default(now())
+  actualizadoEn       DateTime              @updatedAt
+
+  detalles            DetalleResumenVenta[] // opcional, para desglose por producto
+  observaciones       String?
+}
+
+model DetalleResumenVenta {
+  id               Int           @id @default(autoincrement())
+  resumenVentaId   Int
+  resumenVenta     ResumenVenta  @relation(fields: [resumenVentaId], references: [id], onDelete: Cascade)
+  productoId       Int
+  producto         Producto      @relation(fields: [productoId], references: [id])
+  cantidadVendida  Int           // unidades vendidas de este producto
+  montoVenta       Float         // total facturado de este producto
+}
+
+
+
 
 
 model HistorialPrecioCosto {
@@ -484,13 +606,9 @@ model Stock {
   //OTROS
   sucursal        Sucursal     @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
   sucursalId      Int          // NUEVO: Relación con la sucursal
-
-
   Vencimiento Vencimiento[]
-
   //AJUSTES DE STOCKS
   AjusteStock AjusteStock[]
-
 }
 
 model Sucursal {
@@ -529,7 +647,16 @@ model Sucursal {
   MetaCobros MetaCobros[]
 
   DepositoCobro DepositoCobro[]
+
+  // stockMinimo StockThreshold?
+  // stockThresholds  StockThreshold[]  // 1 sucursal → N umbrales
+
+  requisiciones Requisicion[]
+
+  resumenesVenta ResumenVenta[]
 }
+
+
 
 model EntregaStock {
   id              Int         @id @default(autoincrement())
@@ -593,6 +720,10 @@ model Usuario {
   MetaCobros MetaCobros[]
 
   DepositoCobro DepositoCobro[]
+
+  requisiciones Requisicion[]
+
+  resumenesVenta ResumenVenta[]
 }
 
 model MetaUsuario {
@@ -672,6 +803,7 @@ model Cliente {
   telefono        String?
   direccion       String?
   compras         Venta[]
+  observaciones   String?
   creadoEn        DateTime     @default(now())
   actualizadoEn   DateTime     @updatedAt
   municipioId     Int?         // EN UBICACION TABLA
@@ -930,6 +1062,7 @@ enum TipoNotificacion {
   SOLICITUD_PRECIO
   TRANSFERENCIA
   VENCIMIENTO
+  STOCK_BAJO
   OTRO
 }
 

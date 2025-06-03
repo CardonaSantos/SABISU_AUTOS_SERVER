@@ -37,6 +37,14 @@ import { RepairModule } from './repair/repair.module';
 import { MetasModule } from './metas/metas.module';
 // import { EmpresaModule } from './crm/empresa/empresa.module';
 import { EmpresaModule } from './CRM/empresa/empresa.module';
+import { SalesSummaryModule } from './sales-summary/sales-summary.module';
+import { PurchaseRequisitionsModule } from './purchase-requisitions/purchase-requisitions.module';
+import { MinimunStocksModule } from './minimun-stocks/minimun-stocks.module';
+import { MinimunStockAlertModule } from './minimun-stock-alert/minimun-stock-alert.module';
+import { ImagenesProductoModule } from './imagenes-producto/imagenes-producto.module';
+import { CloudinaryModule } from './cloudinary/cloudinary.module';
+import { CloudinaryProvider } from './cloudinary/cloudinaryConfig';
+import { RequisicionModule } from './requisicion/requisicion.module';
 
 @Module({
   imports: [
@@ -78,8 +86,15 @@ import { EmpresaModule } from './CRM/empresa/empresa.module';
     RepairModule,
     MetasModule,
     EmpresaModule,
+    SalesSummaryModule,
+    PurchaseRequisitionsModule,
+    MinimunStocksModule,
+    MinimunStockAlertModule,
+    ImagenesProductoModule,
+    CloudinaryModule,
+    RequisicionModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, CloudinaryProvider],
 })
 export class AppModule {}

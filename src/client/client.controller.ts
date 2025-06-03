@@ -21,11 +21,6 @@ export class ClientController {
     return this.clientService.create(createClientDto);
   }
 
-  @Get()
-  findAll() {
-    return this.clientService.findAll();
-  }
-
   @Get('/get-all-customers')
   findAllCustomers() {
     return this.clientService.Customers();
@@ -40,11 +35,6 @@ export class ClientController {
   @Get('/get-clients')
   getClientToCredit() {
     return this.clientService.getClientToCredit();
-  }
-
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.clientService.findOne(+id);
   }
 
   @Patch(':id')

@@ -1,0 +1,11 @@
+﻿codigoProducto,nombre,descripcion,categorias,stockMinimo,preciosVenta,precioCostoActual,codigoProveedor
+P001,Cierra Truper ,Cierra Truper,Cierras,4,1200.5,900.0,PROV001
+P002,Dertornillador inhalambrico,,"Trupper, Destornillador",10,"800, 900, 100",,
+P003,Taladro eléctrico,Taladro eléctrico,"Herramientas, Taladros",5,"1500, 1600",1000.0,PROV002
+P004,Sierra circular,Sierra circular,"Herramientas, Sierras",3,2000,1500.0,PROV003
+P005,Martillo de goma,Martillo de goma,"Herramientas, Martillos",8,500,300.0,PROV001
+P006,Llave ajustable,Llave ajustable,"Herramientas, Llaves",6,700,450.0,PROV002
+P007,Nivel de burbuja,Nivel de burbuja,"Herramientas, Niveles",7,600,400.0,PROV003
+P008,Cinta métrica,Cinta métrica,"Herramientas, Medición",15,200,100.0,PROV002
+P009,Destornillador plano,Destornillador plano,"Herramientas, Destornilladores",12,300,180.0,PROV001
+P010,Broca para metal,Broca para metal,"Herramientas, Brocas",20,150,80.0,PROV003

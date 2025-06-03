@@ -1,4 +1,10 @@
-import { IsArray, IsNumber, IsOptional, IsString } from 'class-validator';
+import {
+  IsArray,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 
 export class CreateNewProductDto {
   @IsString()
@@ -6,6 +12,9 @@ export class CreateNewProductDto {
 
   @IsString()
   codigoProducto: string; // Código único del producto
+
+  @IsString()
+  codigoProveedor?: string;
 
   @IsString()
   descripcion: string; // Código único del producto
@@ -20,4 +29,10 @@ export class CreateNewProductDto {
 
   @IsNumber()
   precioCostoActual: number;
+
+  @IsInt()
+  stockMinimo: number;
+
+  @IsArray()
+  imagenes: string[];
 }

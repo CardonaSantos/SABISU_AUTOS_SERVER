@@ -16,10 +16,6 @@ export class CreateClientDto {
   dpi?: string; // DPI opcional y único
 
   @IsOptional()
-  @IsString()
-  iPInternet?: string;
-
-  @IsOptional()
   @IsPhoneNumber('GT') // Código de país para Guatemala
   telefono?: string;
 
@@ -34,4 +30,8 @@ export class CreateClientDto {
   @IsOptional()
   @IsInt()
   departamentoId?: number;
+
+  @IsOptional()
+  @IsString()
+  observaciones?: string;
 }

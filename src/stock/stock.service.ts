@@ -10,6 +10,15 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateEntregaStockDto } from 'src/entrega-stock/dto/create-entrega-stock.dto';
 import { AjusteStockService } from 'src/ajuste-stock/ajuste-stock.service';
 import { DeleteStockDto } from './dto/delete-stock.dto';
+import * as dayjs from 'dayjs';
+import * as utc from 'dayjs/plugin/utc';
+import * as timezone from 'dayjs/plugin/timezone';
+import 'dayjs/locale/es-mx';
+
+dayjs.extend(utc);
+dayjs.locale('es-mx');
+dayjs.extend(timezone);
+
 @Injectable()
 export class StockService {
   //
@@ -51,13 +60,17 @@ export class StockService {
 
       // Crear registros de Stock asociados a la entrega
       for (const entry of stockEntries) {
+        const fechaVencimientoLocal = dayjs
+          .tz(entry.fechaVencimiento, 'America/Guatemala')
+          .format();
+
         const registroStock = await this.prisma.stock.create({
           data: {
             productoId: entry.productoId,
             cantidad: entry.cantidad,
             costoTotal: entry.precioCosto * entry.cantidad,
             fechaIngreso: entry.fechaIngreso,
-            fechaVencimiento: entry.fechaVencimiento,
+            fechaVencimiento: fechaVencimientoLocal,
             precioCosto: entry.precioCosto,
             entregaStockId: newRegistDeliveryStock.id, // Asociar con la entrega
             sucursalId: sucursalId,

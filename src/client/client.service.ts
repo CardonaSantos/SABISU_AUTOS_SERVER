@@ -12,8 +12,6 @@ export class ClientService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(createClientDto: CreateClientDto) {
-    console.log('La data entrando al client es: ', createClientDto);
-
     try {
       const client = await this.prisma.cliente.create({
         data: {
@@ -21,15 +19,13 @@ export class ClientService {
           dpi: createClientDto.dpi,
           telefono: createClientDto.telefono,
           direccion: createClientDto.direccion,
-          iPInternet: createClientDto.iPInternet,
+          observaciones: createClientDto.observaciones,
         },
       });
 
       if (!client) {
         throw new BadRequestException('Error al crear cliente');
       }
-
-      console.log('El cliente creado es: ', client);
 
       return client;
     } catch (error) {
@@ -47,7 +43,7 @@ export class ClientService {
           telefono: true,
           dpi: true,
           direccion: true,
-          iPInternet: true,
+          observaciones: true,
           actualizadoEn: true,
           _count: {
             select: {
@@ -86,18 +82,8 @@ export class ClientService {
     }
   }
 
-  findAll() {
-    return `This action returns all client`;
-  }
-
-  findOne(id: number) {
-    return `This action returns a #${id} client`;
-  }
-
   async update(id: number, updateClientDto: UpdateClientDto) {
     try {
-      console.log('La data llegando es: ', updateClientDto);
-
       const userUpdated = await this.prisma.cliente.update({
         where: {
           id: id,
@@ -107,11 +93,9 @@ export class ClientService {
           telefono: updateClientDto.telefono,
           direccion: updateClientDto.direccion,
           dpi: updateClientDto.dpi,
-          iPInternet: updateClientDto.iPInternet,
+          observaciones: updateClientDto.observaciones,
         },
       });
-
-      console.log('user actualizado', userUpdated);
 
       return userUpdated;
     } catch (error) {

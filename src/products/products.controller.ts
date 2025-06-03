@@ -7,21 +7,48 @@ import {
   Param,
   Delete,
   ParseIntPipe,
+  UploadedFiles,
+  UseInterceptors,
 } from '@nestjs/common';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { CreateNewProductDto } from './dto/create-productNew.dto';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
+import { join } from 'path';
 
 @Controller('products')
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
   //CREAR
-  @Post()
-  async create(@Body() createProductDto: CreateNewProductDto) {
-    console.log('La data llegando al controller es: ', createProductDto);
 
-    return await this.productsService.create(createProductDto);
+  @Post()
+  @UseInterceptors(FileFieldsInterceptor([{ name: 'images', maxCount: 10 }]))
+  async create(
+    @UploadedFiles() files: { images?: Express.Multer.File[] },
+    @Body() body: Record<string, any>, // recibimos todo en crudo
+  ) {
+    // 1) Parseamos/convertimos los campos que vienen como string
+    const dto = new CreateNewProductDto();
+    dto.nombre = body.nombre;
+    dto.descripcion = body.descripcion || null;
+    dto.codigoProducto = body.codigoProducto;
+    dto.codigoProveedor = body.codigoProveedor || null;
+    dto.stockMinimo = Number(body.stockMinimo) || null;
+    dto.precioCostoActual = Number(body.precioCostoActual);
+    // categorías y precios vienen serializados como JSON
+    dto.categorias = JSON.parse(body.categorias || '[]');
+    dto.precioVenta = JSON.parse(body.precioVenta || '[]');
+    dto.creadoPorId = Number(body.creadoPorId);
+
+    // 2) Convertimos los archivos a base64 (si tu servicio espera base64)
+    dto.imagenes = (files.images || []).map((file) => {
+      const b64 = file.buffer.toString('base64');
+      return `data:${file.mimetype};base64,${b64}`;
+    });
+
+    // 3) Llamamos al servicio “normal” pasándole el DTO completo
+    return this.productsService.create(dto);
   }
 
   @Get('/sucursal/:id')
@@ -65,22 +92,65 @@ export class ProductsController {
     return await this.productsService.productToWarranty();
   }
 
+  @Get('/carga-masiva')
+  async makeCargaMasiva() {
+    const ruta = join(process.cwd(), 'src', 'assets', 'productos_ejemplo.csv');
+    return await this.productsService.loadCSVandImportProducts(ruta);
+  }
+
   @Get(':id')
   async findOne(@Param('id', ParseIntPipe) id: number) {
     return await this.productsService.findOne(id);
   }
 
-  @Patch('/actualizar/producto/:id')
+  @Patch('actualizar/producto/:id')
+  @UseInterceptors(FileFieldsInterceptor([{ name: 'images', maxCount: 10 }]))
   async update(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() updateProductDto: UpdateProductDto,
+    @Param('id') id: string,
+    @UploadedFiles() files: { images?: Express.Multer.File[] },
+    @Body() body: Record<string, any>,
   ) {
-    console.log(
-      'EN EL CONTROLLER NOS LLEGA EL PRODUCTO COMPLETO A EDITAR EL CUAL ES: ',
-      updateProductDto,
-    );
+    const dto = new UpdateProductDto();
 
-    return await this.productsService.update(id, updateProductDto);
+    // Campos simples
+    dto.nombre = body.nombre;
+    dto.descripcion = body.descripcion || dto.descripcion;
+    dto.codigoProducto = body.codigoProducto;
+    dto.codigoProveedor = body.codigoProveedor || dto.codigoProveedor;
+    dto.stockMinimo =
+      body.stockMinimo != null ? Number(body.stockMinimo) : dto.stockMinimo;
+    dto.precioCostoActual =
+      body.precioCostoActual != null
+        ? Number(body.precioCostoActual)
+        : dto.precioCostoActual;
+
+    // Arrays via JSON.parse
+    dto.categorias = body.categorias
+      ? JSON.parse(body.categorias)
+      : dto.categorias;
+
+    dto.precios = body.precios ? JSON.parse(body.precios) : dto.precios;
+
+    // Convertir archivos nuevos a base64
+    const nuevas = (files.images || []).map((file) => {
+      const b64 = file.buffer.toString('base64');
+      return `data:${file.mimetype};base64,${b64}`;
+    });
+
+    // Unir URLs previas + nuevas imágenes
+    dto.imagenes = [...nuevas];
+
+    // Llamas tu servicio con id + dto
+    return this.productsService.update(Number(id), dto);
+  }
+
+  @Delete('/delete-image-from-product/:id/:imageId')
+  async removeImageFromProduct(
+    @Param('id') id: string,
+    @Param('imageId', ParseIntPipe) imageId: number,
+  ) {
+    const decodedId = decodeURIComponent(id); // ← si lo necesitas en formato limpio
+    return this.productsService.removeImageFromProduct(decodedId, imageId);
   }
 
   @Delete('/delete-all')
