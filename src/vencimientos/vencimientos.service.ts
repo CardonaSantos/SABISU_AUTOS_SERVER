@@ -29,7 +29,7 @@ export class VencimientosService {
     private readonly notificationService: NotificationService,
   ) {}
 
-  @Cron(CronExpression.EVERY_10_SECONDS, {
+  @Cron('0 23 * * *', {
     name: 'vencimientos.midnightGuate',
     timeZone: 'America/Guatemala',
   })
