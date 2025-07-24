@@ -1,0 +1,7 @@
+-- AlterTable
+ALTER TABLE "EliminacionStock" ADD COLUMN     "cantidadAnterior" INTEGER,
+ADD COLUMN     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ADD COLUMN     "referenciaId" INTEGER,
+ADD COLUMN     "referenciaTipo" TEXT,
+ADD COLUMN     "stockRestante" INTEGER,
+ADD COLUMN     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;

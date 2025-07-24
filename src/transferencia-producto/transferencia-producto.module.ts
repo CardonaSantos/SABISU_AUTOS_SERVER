@@ -4,6 +4,7 @@ import { TransferenciaProductoController } from './transferencia-producto.contro
 import { PrismaService } from 'src/prisma/prisma.service';
 import { NotificationService } from 'src/notification/notification.service';
 import { WebsocketGateway } from 'src/web-sockets/websocket.gateway';
+import { HistorialStockTrackerService } from 'src/historial-stock-tracker/historial-stock-tracker.service';
 
 @Module({
   controllers: [TransferenciaProductoController],

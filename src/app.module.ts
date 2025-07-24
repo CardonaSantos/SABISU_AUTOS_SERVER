@@ -45,6 +45,10 @@ import { ImagenesProductoModule } from './imagenes-producto/imagenes-producto.mo
 import { CloudinaryModule } from './cloudinary/cloudinary.module';
 import { CloudinaryProvider } from './cloudinary/cloudinaryConfig';
 import { RequisicionModule } from './requisicion/requisicion.module';
+import { HistorialStockTrackerModule } from './historial-stock-tracker/historial-stock-tracker.module';
+import { RecepcionRequisicionesModule } from './recepcion-requisiciones/recepcion-requisiciones.module';
+import { UtilitiesModule } from './utilities/utilities.module';
+import { HistorialStockModule } from './historial-stock/historial-stock.module';
 
 @Module({
   imports: [
@@ -93,6 +97,10 @@ import { RequisicionModule } from './requisicion/requisicion.module';
     ImagenesProductoModule,
     CloudinaryModule,
     RequisicionModule,
+    HistorialStockTrackerModule,
+    RecepcionRequisicionesModule,
+    UtilitiesModule,
+    HistorialStockModule,
   ],
   controllers: [AppController],
   providers: [AppService, CloudinaryProvider],

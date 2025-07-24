@@ -6,18 +6,19 @@ import {
 import { CreateSolicitudTransferenciaProductoDto } from './dto/create-solicitud-transferencia-producto.dto';
 import { UpdateSolicitudTransferenciaProductoDto } from './dto/update-solicitud-transferencia-producto.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { TransferenciaProductoService } from 'src/transferencia-producto/transferencia-producto.service';
 import { NotificationService } from 'src/notification/notification.service';
 import { WebsocketGateway } from 'src/web-sockets/websocket.gateway';
 import { CreateTransferenciaProductoDto } from 'src/transferencia-producto/dto/create-transferencia-producto.dto';
+import { HistorialStockTrackerService } from 'src/historial-stock-tracker/historial-stock-tracker.service';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class SolicitudTransferenciaProductoService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly transferenciaProductoService: TransferenciaProductoService,
     private readonly notificationService: NotificationService,
     private readonly webSocketGateway: WebsocketGateway,
+    private readonly tracker: HistorialStockTrackerService,
   ) {}
 
   async create(
@@ -166,12 +167,11 @@ export class SolicitudTransferenciaProductoService {
   //     throw new Error(`Error al aceptar la transferencia: ${error.message}`);
   //   }
   // }
-
   async createTransferencia(idSolicitudTransferencia: number, userID: number) {
-    try {
-      // Encontrar la solicitud de transferencia
+    return await this.prisma.$transaction(async (tx) => {
+      // 1. Buscar la solicitud de transferencia con sus datos clave
       const solicitudTransferencia =
-        await this.prisma.solicitudTransferenciaProducto.findUnique({
+        await tx.solicitudTransferenciaProducto.findUnique({
           where: { id: idSolicitudTransferencia },
           include: {
             producto: { select: { nombre: true } },
@@ -185,7 +185,7 @@ export class SolicitudTransferenciaProductoService {
         throw new Error('Solicitud de transferencia no encontrada');
       }
 
-      // Extraer datos necesarios para la transferencia
+      // DTO para usar en la función de transferencia
       const dto: CreateTransferenciaProductoDto = {
         productoId: solicitudTransferencia.productoId,
         cantidad: solicitudTransferencia.cantidad,
@@ -194,27 +194,68 @@ export class SolicitudTransferenciaProductoService {
         usuarioEncargadoId: userID,
       };
 
-      // Ejecutar la transferencia
-      const transferencia = await this.transferirProducto(dto);
-      const product = await this.prisma.producto.findUnique({
+      // 2. Obtener cantidades anteriores antes de mover stock
+      // (para trackeo de sucursal origen)
+      const stockOrigen = await tx.stock.aggregate({
         where: {
-          id: solicitudTransferencia.productoId,
+          productoId: dto.productoId,
+          sucursalId: dto.sucursalOrigenId,
         },
+        _sum: { cantidad: true },
       });
+      const cantidadAnteriorOrigen = stockOrigen._sum.cantidad ?? 0;
+      const cantidadNuevaOrigen = cantidadAnteriorOrigen - dto.cantidad;
 
-      // Crear la notificación para el usuario solicitante
-      const mensaje = `Un administrador aceptó tu solicitud de transferencia para el producto "${product.nombre}".`;
+      // (para trackeo de sucursal destino)
+      const stockDestino = await tx.stock.aggregate({
+        where: {
+          productoId: dto.productoId,
+          sucursalId: dto.sucursalDestinoId,
+        },
+        _sum: { cantidad: true },
+      });
+      const cantidadAnteriorDestino = stockDestino._sum.cantidad ?? 0;
+      const cantidadNuevaDestino = cantidadAnteriorDestino + dto.cantidad;
 
+      // 3. Transferir stock y crear el registro de transferencia
+      // (La lógica de transferirProducto ejecuta el movimiento y retorna el registro)
+      const transferencia = await this.transferirProducto(dto, tx);
+
+      // 4. TRACKER: historial en sucursal origen
+      await this.tracker.transferenciaTracker(
+        tx,
+        dto.productoId,
+        dto.sucursalOrigenId,
+        userID,
+        transferencia.id,
+        cantidadAnteriorOrigen,
+        cantidadNuevaOrigen,
+      );
+
+      // 5. TRACKER: historial en sucursal destino (opcional pero recomendado)
+      await this.tracker.transferenciaTracker(
+        tx,
+        dto.productoId,
+        dto.sucursalDestinoId,
+        userID,
+        transferencia.id,
+        cantidadAnteriorDestino,
+        cantidadNuevaDestino,
+      );
+
+      // 6. Notificar al usuario solicitante
+      const mensaje = `Un administrador aceptó tu solicitud de transferencia para el producto "${solicitudTransferencia.producto.nombre}".`;
       await this.notificationService.createOneNotification(
         mensaje,
         userID,
         solicitudTransferencia.usuarioSolicitante.id,
         'TRANSFERENCIA',
         idSolicitudTransferencia,
+        tx,
       );
 
-      // Eliminar la solicitud de transferencia después de completar la transferencia
-      await this.prisma.solicitudTransferenciaProducto.delete({
+      // 7. Eliminar la solicitud de transferencia
+      await tx.solicitudTransferenciaProducto.delete({
         where: { id: idSolicitudTransferencia },
       });
 
@@ -223,9 +264,7 @@ export class SolicitudTransferenciaProductoService {
           'Transferencia realizada, solicitud eliminada y notificación enviada con éxito',
         transferencia,
       };
-    } catch (error) {
-      throw new Error(`Error al aceptar la transferencia: ${error.message}`);
-    }
+    });
   }
 
   async rechazarTransferencia(
@@ -261,7 +300,11 @@ export class SolicitudTransferenciaProductoService {
 
   //=====================================================================>
 
-  async transferirProducto(dto: CreateTransferenciaProductoDto) {
+  // Nota: el tx ahora es un argumento obligatorio
+  async transferirProducto(
+    dto: CreateTransferenciaProductoDto,
+    tx: Prisma.TransactionClient,
+  ) {
     const {
       productoId,
       cantidad,
@@ -270,72 +313,63 @@ export class SolicitudTransferenciaProductoService {
       usuarioEncargadoId,
     } = dto;
 
-    // Verificar que hay suficiente stock en la sucursal de origen sumando todos los registros disponibles
-    const stockOrigenes = await this.prisma.stock.findMany({
+    // Usar tx en vez de this.prisma en TODO:
+    const stockOrigenes = await tx.stock.findMany({
       where: { productoId, sucursalId: sucursalOrigenId },
-      orderBy: { fechaIngreso: 'asc' }, // Ordenar por fechaIngreso para aplicar FIFO
+      orderBy: { fechaIngreso: 'asc' },
     });
 
-    // Calcular la cantidad total disponible en la sucursal de origen
     const cantidadTotalStockOrigen = stockOrigenes.reduce(
       (total, stock) => total + stock.cantidad,
       0,
     );
-
     if (cantidadTotalStockOrigen < cantidad) {
       throw new Error('Stock insuficiente en la sucursal de origen');
     }
 
     let cantidadRestante = cantidad;
 
-    // FIFO
     for (const stock of stockOrigenes) {
       if (cantidadRestante === 0) break;
-
       if (stock.cantidad <= cantidadRestante) {
-        // Si el stock actual es menor o igual a la cantidad requerida, restar todo el stock
-        await this.prisma.stock.update({
+        await tx.stock.update({
           where: { id: stock.id },
-          data: { cantidad: 0 }, // Consumir todo este registro de stock
+          data: { cantidad: 0 },
         });
         cantidadRestante -= stock.cantidad;
       } else {
-        // Si el stock actual es mayor a la cantidad requerida, restar solo lo necesario
-        await this.prisma.stock.update({
+        await tx.stock.update({
           where: { id: stock.id },
           data: { cantidad: stock.cantidad - cantidadRestante },
         });
-        cantidadRestante = 0; // Ya no queda más cantidad por transferir
+        cantidadRestante = 0;
       }
     }
 
-    // Buscar o crear el stock en la sucursal de destino
-    const stockDestino = await this.prisma.stock.findFirst({
+    const stockDestino = await tx.stock.findFirst({
       where: { productoId, sucursalId: sucursalDestinoId },
     });
 
     if (stockDestino) {
-      // Si ya existe el stock del producto en la sucursal destino, sumamos la cantidad
-      await this.prisma.stock.update({
+      await tx.stock.update({
         where: { id: stockDestino.id },
         data: { cantidad: stockDestino.cantidad + cantidad },
       });
     } else {
-      // Si no existe, creamos un nuevo registro de stock en la sucursal destino
-      await this.prisma.stock.create({
+      await tx.stock.create({
         data: {
           productoId,
           sucursalId: sucursalDestinoId,
           cantidad,
-          precioCosto: stockOrigenes[0].precioCosto, // Usar el precioCosto del primer stock FIFO
+          precioCosto: stockOrigenes[0].precioCosto,
           costoTotal: stockOrigenes[0].precioCosto * cantidad,
           fechaIngreso: new Date(),
         },
       });
     }
 
-    // Registrar la transferencia en la tabla TransferenciaProducto
-    await this.prisma.transferenciaProducto.create({
+    // Registrar la transferencia y regresar el registro (para el tracker)
+    const transferencia = await tx.transferenciaProducto.create({
       data: {
         productoId,
         cantidad,
@@ -346,7 +380,7 @@ export class SolicitudTransferenciaProductoService {
       },
     });
 
-    return { message: 'Transferencia realizada con éxito' };
+    return transferencia;
   }
 
   async findAll() {

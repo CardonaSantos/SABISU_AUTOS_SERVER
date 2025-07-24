@@ -95,7 +95,7 @@ export class ProductsController {
   @Get('/carga-masiva')
   async makeCargaMasiva() {
     const ruta = join(process.cwd(), 'src', 'assets', 'productos_ejemplo.csv');
-    return await this.productsService.loadCSVandImportProducts(ruta);
+    // return await this.productsService.loadCSVandImportProducts(ruta);
   }
 
   @Get(':id')
@@ -114,6 +114,9 @@ export class ProductsController {
 
     // Campos simples
     dto.nombre = body.nombre;
+    dto.motivoCambio = body.motivoCambio;
+    dto.sucursalId = parseInt(body.sucursalId);
+    dto.modificadoPorId = parseInt(body.modificadoPorId);
     dto.descripcion = body.descripcion || dto.descripcion;
     dto.codigoProducto = body.codigoProducto;
     dto.codigoProveedor = body.codigoProveedor || dto.codigoProveedor;
@@ -156,6 +159,12 @@ export class ProductsController {
   @Delete('/delete-all')
   async removeAll() {
     return await this.productsService.removeAll();
+  }
+
+  @Delete('/delete-one-price-from-product/:id')
+  async removePrice(@Param('id', ParseIntPipe) id: number) {
+    console.log('Eliminando el precio: ', id);
+    return await this.productsService.removePrice(id);
   }
 
   @Delete(':id')

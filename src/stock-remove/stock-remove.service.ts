@@ -11,18 +11,23 @@ import { PrismaService } from 'src/prisma/prisma.service';
 export class StockRemoveService {
   constructor(private readonly prisma: PrismaService) {}
 
-  create(createStockRemoveDto: CreateStockRemoveDto) {
-    return 'This action adds a new stockRemove';
-  }
-
-  findAll() {
-    return `This action returns all stockRemove`;
-  }
-
   async find_remove_stock() {
     try {
       const regists = await this.prisma.eliminacionStock.findMany({
-        include: {
+        select: {
+          id: true,
+          productoId: true,
+          fechaHora: true,
+          usuarioId: true,
+          sucursalId: true,
+          motivo: true,
+          cantidadAnterior: true,
+          cantidadStockEliminada: true,
+          stockRestante: true,
+          referenciaTipo: true,
+          referenciaId: true,
+          createdAt: true,
+          updatedAt: true,
           producto: {
             select: {
               id: true,
@@ -45,33 +50,21 @@ export class StockRemoveService {
             },
           },
         },
-        orderBy: {
-          fechaHora: 'desc',
-        },
+        orderBy: { fechaHora: 'desc' },
       });
 
-      if (!regists) {
-        throw new NotFoundException('No se pudieron encontrar los registros');
+      if (!regists || regists.length === 0) {
+        throw new NotFoundException(
+          'No se encontraron registros de eliminación de stock',
+        );
       }
 
       return regists;
     } catch (error) {
-      console.log(error);
+      console.error(error);
       throw new InternalServerErrorException(
-        'Error al conseguir los registros de stocks',
+        'Error al conseguir los registros de elimina­ción de stock',
       );
     }
-  }
-
-  findOne(id: number) {
-    return `This action returns a #${id} stockRemove`;
-  }
-
-  update(id: number, updateStockRemoveDto: UpdateStockRemoveDto) {
-    return `This action updates a #${id} stockRemove`;
-  }
-
-  remove(id: number) {
-    return `This action removes a #${id} stockRemove`;
   }
 }

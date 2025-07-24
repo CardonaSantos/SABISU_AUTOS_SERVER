@@ -7,6 +7,7 @@ import {
   IsOptional,
   IsString,
 } from 'class-validator';
+import { RolPrecio } from '@prisma/client';
 
 class PriceDto {
   @IsInt()
@@ -14,6 +15,13 @@ class PriceDto {
 
   @IsNumber()
   precio: number;
+
+  @IsOptional()
+  @IsInt()
+  orden?: number;
+
+  @IsOptional()
+  rol?: RolPrecio;
 }
 
 export class UpdateProductDto {
@@ -38,7 +46,7 @@ export class UpdateProductDto {
 
   @IsNumber()
   @IsOptional()
-  precioVenta: number; // Precio de venta del producto
+  precioVenta: number[]; // Precio de venta del producto
 
   @IsArray()
   @IsOptional()
@@ -56,4 +64,20 @@ export class UpdateProductDto {
 
   @IsArray()
   imagenes: string[];
+
+  //nuevos
+  @IsInt()
+  sucursalId?: number;
+
+  @IsString()
+  motivoCambio: string;
+
+  @IsInt()
+  modificadoPorId?: number;
+}
+
+class precioProducto {
+  rol: RolPrecio;
+  orden: number;
+  precio: number;
 }

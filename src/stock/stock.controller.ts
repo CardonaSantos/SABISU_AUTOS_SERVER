@@ -42,8 +42,6 @@ export class StockController {
 
   @Post('/delete-stock')
   async deleteOneStock(@Body() dto: DeleteStockDto) {
-    console.log('En el controller del delete stock llega: ', dto);
-
     return await this.stockService.deleteOneStock(dto);
   }
 

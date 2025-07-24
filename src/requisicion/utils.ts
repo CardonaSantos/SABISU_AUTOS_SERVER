@@ -6,12 +6,19 @@ export interface StockAlertItem {
   stockMinimo: number;
   /** cantidad que falta para llegar al stock mínimo (>= 1) */
   cantidadSugerida: number;
+  codigoProducto: string;
+  id: number;
+  fechaExpiracion?: Date | null;
+  ///
+  tieneSolicitudPendiente?: boolean;
+  foliosPendientes?: string[];
 }
 
 export interface RequisitionLineInput {
   productoId: number;
   /** cantidad final que deseas pedir (>= 1) */
   cantidadSugerida: number;
+  fechaExpiracion: Date | null;
 }
 
 export interface CreateRequisitionDto {

@@ -1,19 +1,18 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { CreateTransferenciaProductoDto } from './dto/create-transferencia-producto.dto';
 import { UpdateTransferenciaProductoDto } from './dto/update-transferencia-producto.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { NotificationService } from 'src/notification/notification.service';
+import { HistorialStockTrackerService } from 'src/historial-stock-tracker/historial-stock-tracker.service';
 
 @Injectable()
 export class TransferenciaProductoService {
+  private readonly logger = new Logger(TransferenciaProductoService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationService: NotificationService,
   ) {}
-
-  create(createTransferenciaProductoDto: CreateTransferenciaProductoDto) {
-    return 'This action adds a new transferenciaProducto';
-  }
 
   async transferirProducto(dto: CreateTransferenciaProductoDto) {
     const {
@@ -24,83 +23,77 @@ export class TransferenciaProductoService {
       usuarioEncargadoId,
     } = dto;
 
-    // Verificar que hay suficiente stock en la sucursal de origen sumando todos los registros disponibles
-    const stockOrigenes = await this.prisma.stock.findMany({
-      where: { productoId, sucursalId: sucursalOrigenId },
-      orderBy: { fechaIngreso: 'asc' }, // Ordenar por fechaIngreso para aplicar FIFO
-    });
-
-    // Calcular la cantidad total disponible en la sucursal de origen
-    const cantidadTotalStockOrigen = stockOrigenes.reduce(
-      (total, stock) => total + stock.cantidad,
-      0,
-    );
-
-    if (cantidadTotalStockOrigen < cantidad) {
-      throw new Error('Stock insuficiente en la sucursal de origen');
-    }
-
-    let cantidadRestante = cantidad;
-
-    // FIFO
-    for (const stock of stockOrigenes) {
-      if (cantidadRestante === 0) break;
-
-      if (stock.cantidad <= cantidadRestante) {
-        // Si el stock actual es menor o igual a la cantidad requerida, restar todo el stock
-        await this.prisma.stock.update({
-          where: { id: stock.id },
-          data: { cantidad: 0 }, // Consumir todo este registro de stock
-        });
-        cantidadRestante -= stock.cantidad;
-      } else {
-        // Si el stock actual es mayor a la cantidad requerida, restar solo lo necesario
-        await this.prisma.stock.update({
-          where: { id: stock.id },
-          data: { cantidad: stock.cantidad - cantidadRestante },
-        });
-        cantidadRestante = 0; // Ya no queda más cantidad por transferir
-      }
-    }
-
-    // Buscar o crear el stock en la sucursal de destino
-    const stockDestino = await this.prisma.stock.findFirst({
-      where: { productoId, sucursalId: sucursalDestinoId },
-    });
-
-    if (stockDestino) {
-      // Si ya existe el stock del producto en la sucursal destino, sumamos la cantidad
-      await this.prisma.stock.update({
-        where: { id: stockDestino.id },
-        data: { cantidad: stockDestino.cantidad + cantidad },
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Buscar los stocks origen en FIFO
+      const stockOrigenes = await tx.stock.findMany({
+        where: { productoId, sucursalId: sucursalOrigenId },
+        orderBy: { fechaIngreso: 'asc' },
       });
-    } else {
-      // Si no existe, creamos un nuevo registro de stock en la sucursal destino
-      await this.prisma.stock.create({
+
+      const cantidadTotalStockOrigen = stockOrigenes.reduce(
+        (total, stock) => total + stock.cantidad,
+        0,
+      );
+      if (cantidadTotalStockOrigen < cantidad) {
+        throw new Error('Stock insuficiente en la sucursal de origen');
+      }
+
+      const cantidadAnterior = cantidadTotalStockOrigen;
+      const cantidadNueva = cantidadTotalStockOrigen - cantidad;
+
+      // 3. FIFO: descontar en origen
+      let cantidadRestante = cantidad;
+      for (const stock of stockOrigenes) {
+        if (cantidadRestante === 0) break;
+        if (stock.cantidad <= cantidadRestante) {
+          await tx.stock.update({
+            where: { id: stock.id },
+            data: { cantidad: 0 },
+          });
+          cantidadRestante -= stock.cantidad;
+        } else {
+          await tx.stock.update({
+            where: { id: stock.id },
+            data: { cantidad: stock.cantidad - cantidadRestante },
+          });
+          cantidadRestante = 0;
+        }
+      }
+
+      const stockDestino = await tx.stock.findFirst({
+        where: { productoId, sucursalId: sucursalDestinoId },
+      });
+      if (stockDestino) {
+        await tx.stock.update({
+          where: { id: stockDestino.id },
+          data: { cantidad: stockDestino.cantidad + cantidad },
+        });
+      } else {
+        await tx.stock.create({
+          data: {
+            productoId,
+            sucursalId: sucursalDestinoId,
+            cantidad,
+            precioCosto: stockOrigenes[0]?.precioCosto ?? 0,
+            costoTotal: (stockOrigenes[0]?.precioCosto ?? 0) * cantidad,
+            fechaIngreso: new Date(),
+          },
+        });
+      }
+
+      const transferencia = await tx.transferenciaProducto.create({
         data: {
           productoId,
-          sucursalId: sucursalDestinoId,
           cantidad,
-          precioCosto: stockOrigenes[0].precioCosto, // Usar el precioCosto del primer stock FIFO
-          costoTotal: stockOrigenes[0].precioCosto * cantidad,
-          fechaIngreso: new Date(),
+          sucursalOrigenId,
+          sucursalDestinoId,
+          usuarioEncargadoId,
+          fechaTransferencia: new Date(),
         },
       });
-    }
 
-    // Registrar la transferencia en la tabla TransferenciaProducto
-    await this.prisma.transferenciaProducto.create({
-      data: {
-        productoId,
-        cantidad,
-        sucursalOrigenId,
-        sucursalDestinoId,
-        usuarioEncargadoId,
-        fechaTransferencia: new Date(),
-      },
+      return { message: 'Transferencia realizada con éxito' };
     });
-
-    return { message: 'Transferencia realizada con éxito' };
   }
 
   findAll() {

@@ -14,6 +14,8 @@ import * as dayjs from 'dayjs';
 import * as utc from 'dayjs/plugin/utc';
 import * as timezone from 'dayjs/plugin/timezone';
 import 'dayjs/locale/es-mx';
+import { HistorialStockTrackerService } from 'src/historial-stock-tracker/historial-stock-tracker.service';
+import { TypeOperationStockTracker } from 'src/historial-stock-tracker/utils';
 
 dayjs.extend(utc);
 dayjs.locale('es-mx');
@@ -25,6 +27,7 @@ export class StockService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ajusteStock: AjusteStockService,
+    private readonly tracker: HistorialStockTrackerService,
   ) {}
 
   async create(createStockDto: StockEntryDTO) {
@@ -138,90 +141,68 @@ export class StockService {
     }
   }
 
-  // async deleteOneStock(dto: DeleteStockDto) {
-  //   try {
-  //     // Obtener los datos del stock antes de eliminarlo
-  //     const stockToDelete = await this.prisma.stock.findUnique({
-  //       where: {
-  //         id: dto.stockId,
-  //       },
-  //       include: {
-  //         producto: true,
-  //         sucursal: true,
-  //       },
-  //     });
-
-  //     if (!stockToDelete) {
-  //       throw new BadRequestException('Stock no encontrado');
-  //     }
-
-  //     // Eliminar el stock
-  //     await this.prisma.stock.delete({
-  //       where: {
-  //         id: dto.stockId,
-  //       },
-  //     });
-
-  //     // Crear el registro en EliminacionStock
-  //     const registroEliminacionStock =
-  //       await this.prisma.eliminacionStock.create({
-  //         data: {
-  //           stockId: dto.stockId,
-  //           productoId: dto.productoId,
-  //           sucursalId: dto.sucursalId,
-  //           usuarioId: dto.usuarioId,
-  //           fechaHora: new Date(),
-  //           motivo: dto.motivo || 'Sin motivo especificado',
-  //         },
-  //       });
-
-  //     console.log('El nuevo registro es: ', registroEliminacionStock);
-
-  //     return registroEliminacionStock;
-  //   } catch (error) {
-  //     console.error(error);
-  //     throw new BadRequestException(
-  //       'Error al eliminar el stock y registrar la eliminación',
-  //     );
-  //   }
-  // }
-
   async deleteOneStock(dto: DeleteStockDto) {
-    try {
-      // Obtener el stock antes de eliminarlo
-      const stockToDelete = await this.prisma.stock.findUnique({
+    return this.prisma.$transaction(async (tx) => {
+      const stockToDelete = await tx.stock.findUnique({
         where: { id: dto.stockId },
       });
-
       if (!stockToDelete) {
         throw new BadRequestException('Stock no encontrado');
       }
 
-      // Crear el registro en EliminacionStock
-      const registroEliminacionStock =
-        await this.prisma.eliminacionStock.create({
-          data: {
-            // stockId: dto.stockId,
-            productoId: dto.productoId,
-            sucursalId: dto.sucursalId,
-            usuarioId: dto.usuarioId,
-            fechaHora: new Date(),
-            motivo: dto.motivo || 'Sin motivo especificado',
-          },
-        });
+      // Calcular stock total antes de eliminar
+      const { _sum } = await tx.stock.aggregate({
+        where: {
+          productoId: dto.productoId,
+          sucursalId: dto.sucursalId,
+        },
+        _sum: { cantidad: true },
+      });
+      const cantidadAnterior = _sum.cantidad ?? 0;
+      const cantidadStockEliminada = stockToDelete.cantidad;
+      const stockRestante = cantidadAnterior - cantidadStockEliminada;
 
-      // Eliminar el stock
-      await this.prisma.stock.delete({
+      const registroEliminacion = await tx.eliminacionStock.create({
+        data: {
+          productoId: dto.productoId,
+          sucursalId: dto.sucursalId,
+          usuarioId: dto.usuarioId,
+          motivo: dto.motivo ?? 'Sin motivo especificado',
+          fechaHora: new Date(),
+          cantidadAnterior,
+          cantidadStockEliminada,
+          stockRestante,
+          referenciaTipo: (dto as any).referenciaTipo,
+          referenciaId: (dto as any).referenciaId,
+        },
+      });
+
+      await tx.stock.delete({
         where: { id: dto.stockId },
       });
 
-      return registroEliminacionStock;
-    } catch (error) {
-      console.error(error);
-      throw new BadRequestException(
-        'Error al eliminar el stock y registrar la eliminación',
+      await this.tracker.trackerStockEliminacion(
+        tx,
+        dto.productoId,
+        dto.sucursalId,
+        dto.usuarioId,
+        cantidadAnterior,
+        stockRestante,
+        registroEliminacion.id,
+        dto.motivo ?? 'Sin motivo especificado',
       );
-    }
+
+      return registroEliminacion;
+    });
+  }
+
+  // Total de stock de un producto en una sucursal
+  async getTotalStock(productoId: number, sucursalId: number): Promise<number> {
+    const { _sum } = await this.prisma.stock.aggregate({
+      where: { productoId, sucursalId },
+      _sum: { cantidad: true },
+    });
+    return _sum.cantidad ?? 0;
   }
 
   async update(id: number, updateStockDto: UpdateStockDto) {

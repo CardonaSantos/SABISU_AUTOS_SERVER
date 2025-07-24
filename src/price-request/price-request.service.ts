@@ -91,25 +91,16 @@ export class PriceRequestService {
 
   async aceptPriceRequest(idSolicitud: number, idUser: number) {
     try {
-      console.log('idsolicitud: ', idSolicitud);
-      console.log('idUser: ', idUser);
-
-      // Buscar la solicitud en estado PENDIENTE
-      const solicitudPendiente = await this.prisma.solicitudPrecio.findFirst({
-        where: {
-          id: idSolicitud,
-          // estado: 'PENDIENTE',
-        },
-        include: { producto: true },
+      const solicitud = await this.prisma.solicitudPrecio.findFirst({
+        where: { id: idSolicitud, estado: 'PENDIENTE' },
+        include: { producto: { select: { id: true, nombre: true } } },
       });
 
-      if (!solicitudPendiente) {
-        throw new BadRequestException('Solicitud no encontrada o ya aprobada');
-      }
+      if (!solicitud)
+        throw new BadRequestException('Solicitud no encontrada o ya procesada');
 
-      // Actualizar el estado de la solicitud a APROBADO
       const solicitudAprobada = await this.prisma.solicitudPrecio.update({
-        where: { id: solicitudPendiente.id },
+        where: { id: idSolicitud },
         data: {
           estado: 'APROBADO',
           fechaRespuesta: new Date(),
@@ -117,46 +108,35 @@ export class PriceRequestService {
         },
       });
 
-      console.log('La solicitud aprobada es: ', solicitudAprobada);
+      // Crear el nuevo precio asociado al producto con los nuevos campos
+      const maxOrden = await this.prisma.precioProducto.aggregate({
+        where: { productoId: solicitud.producto.id },
+        _max: { orden: true },
+      });
 
-      const productoId = solicitudPendiente.producto.id; // Recuperamos el productoId de la solicitud
-
-      // Crear el nuevo precio asociado al producto
       const nuevoPrecio = await this.prisma.precioProducto.create({
         data: {
           estado: 'APROBADO',
           precio: solicitudAprobada.precioSolicitado,
           creadoPorId: idUser,
-          productoId: productoId,
-          tipo: 'CREADO_POR_SOLICITUD',
+          productoId: solicitud.producto.id,
+          tipo: 'CREADO_POR_SOLICITUD', // Enum, ¡ajusta si hace falta!
+          orden: (maxOrden._max.orden || 0) + 1, // siguiente orden
+          usado: false,
+          rol: 'ESPECIAL',
         },
       });
 
-      console.log('Nuevo precio creado: ', nuevoPrecio);
+      // 4. Notificar al solicitante
+      await this.notificationService.createOneNotification(
+        `Un administrador ha aceptado tu solicitud de precio para el producto "${solicitud.producto.nombre}"`,
+        idUser,
+        solicitudAprobada.solicitadoPorId,
+        'SOLICITUD_PRECIO',
+      );
 
-      const producto = await this.prisma.producto.findUnique({
-        where: {
-          id: solicitudAprobada.productoId,
-        },
-      });
-
-      // Crear la notificación para el usuario que hizo la solicitud
-      const nuevaNotificacion =
-        await this.notificationService.createOneNotification(
-          `Un administrador ha aceptado tu solicitud de precio para el producto "${producto.nombre}"`,
-          idUser,
-          solicitudAprobada.solicitadoPorId,
-          'SOLICITUD_PRECIO',
-        );
-      console.log('Notificación de confirmación: ', nuevaNotificacion);
-
-      // Borrar la solicitud procesada para que no vuelva a aparecer
-      const solicitudBorrada = await this.prisma.solicitudPrecio.delete({
-        where: { id: solicitudAprobada.id },
-      });
-
-      console.log('La solicitud borrada es: ', solicitudBorrada);
-      // return { solicitudAprobada, nuevoPrecio, nuevaNotificacion };
+      // 5. ¡No borres la solicitud! Solo retorna o maneja si quieres limpiar la UI.
+      return { solicitudAprobada, nuevoPrecio };
     } catch (error) {
       console.error(error);
       throw new BadRequestException('Error al procesar la solicitud de precio');

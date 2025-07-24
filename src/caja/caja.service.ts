@@ -127,29 +127,31 @@ export class CajaService {
   //ABRIR EL REGISTRO DE CAJA CON DATOS PRIMARIOS
   async createRegistCash(createCajaDto: OpenRegistDTO) {
     try {
-      console.log('Datos: ', createCajaDto);
+      const { sucursalId, usuarioId, saldoInicial, comentario } = createCajaDto;
 
-      if (
-        !createCajaDto.sucursalId ||
-        !createCajaDto.usuarioId ||
-        createCajaDto.saldoInicial === undefined
-      ) {
+      // Validación de datos primarios
+      if (!sucursalId || !usuarioId || saldoInicial === undefined) {
         throw new BadRequestException(
           'Faltan datos requeridos para abrir el registro de caja',
         );
       }
 
-      const firstCashRegist = await this.prisma.registroCaja.create({
+      // Crear el registro de caja
+      const registroCaja = await this.prisma.registroCaja.create({
         data: {
-          sucursalId: createCajaDto.sucursalId,
-          usuarioId: createCajaDto.usuarioId,
-          saldoInicial: Number(createCajaDto.saldoInicial),
+          sucursal: { connect: { id: sucursalId } },
+          usuarioInicio: { connect: { id: usuarioId } },
+          saldoInicial: Number(saldoInicial),
           estado: 'ABIERTO',
-          comentario: createCajaDto.comentario,
+          comentario: comentario ?? undefined,
+        },
+        include: {
+          sucursal: true,
+          usuarioInicio: true,
         },
       });
 
-      return firstCashRegist;
+      return registroCaja;
     } catch (error) {
       console.error('Error al abrir el registro de caja:', error);
       throw new InternalServerErrorException(
@@ -159,24 +161,29 @@ export class CajaService {
   }
 
   //CONSEGUIR EL ULTIMO REGISTRO DE CAJA ABIERTO DE MI SUCURSAL, CON ESTE USUARIO LOGUEADO - PARA EL TERNARIO
-  async findOpenCashRegist(sucursalId: number, userId: number) {
+  async findOpenCashRegist(sucursalId: number, usuarioInicioId: number) {
     try {
       const openCashRegist = await this.prisma.registroCaja.findFirst({
         where: {
           sucursalId: sucursalId,
-          usuarioId: userId,
-          // fechaCierre: null,
+          usuarioInicioId: usuarioInicioId,
           estado: 'ABIERTO',
         },
         orderBy: {
-          fechaInicio: 'desc', // Ordenar para obtener el más reciente
+          fechaApertura: 'desc', // Para traer el más reciente
         },
         include: {
-          usuario: {
+          usuarioInicio: {
             select: {
               nombre: true,
               id: true,
               rol: true,
+            },
+          },
+          sucursal: {
+            select: {
+              nombre: true,
+              id: true,
             },
           },
         },
@@ -332,30 +339,49 @@ export class CajaService {
   async findAllCashRegister(idSucursal: number) {
     try {
       const data = await this.prisma.registroCaja.findMany({
-        orderBy: {
-          fechaCierre: 'desc',
-        },
         where: {
           sucursalId: idSucursal,
         },
+        orderBy: {
+          fechaCierre: 'desc',
+        },
         include: {
-          ventas: {
+          sucursal: {
+            select: {
+              id: true,
+              nombre: true,
+            },
+          },
+          usuarioInicio: {
+            select: {
+              id: true,
+              nombre: true,
+              rol: true,
+            },
+          },
+          usuarioCierre: {
+            select: {
+              id: true,
+              nombre: true,
+              rol: true,
+            },
+          },
+          movimientos: {
             orderBy: {
-              fechaVenta: 'desc',
+              fecha: 'desc',
             },
             select: {
-              fechaVenta: true,
               id: true,
-              productos: {
+              tipo: true,
+              monto: true,
+              fecha: true,
+              descripcion: true,
+              referencia: true,
+              usuario: {
                 select: {
-                  cantidad: true,
-                  producto: {
-                    select: {
-                      id: true,
-                      nombre: true,
-                      codigoProducto: true,
-                    },
-                  },
+                  id: true,
+                  nombre: true,
+                  rol: true,
                 },
               },
             },
@@ -365,10 +391,10 @@ export class CajaService {
               fechaDeposito: 'desc',
             },
             select: {
+              id: true,
               banco: true,
               descripcion: true,
               fechaDeposito: true,
-              id: true,
               monto: true,
               numeroBoleta: true,
               usadoParaCierre: true,
@@ -399,24 +425,12 @@ export class CajaService {
               },
             },
           },
-          sucursal: {
-            select: {
-              id: true,
-              nombre: true,
-            },
-          },
-          usuario: {
-            select: {
-              id: true,
-              nombre: true,
-              rol: true,
-            },
-          },
+          // Si quieres puedes agregar más relaciones o detalles aquí
         },
       });
       return data;
     } catch (error) {
-      console.log(error);
+      console.error(error);
       throw new InternalServerErrorException(
         'Error al conseguir datos de registros de cajas',
       );

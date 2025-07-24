@@ -281,13 +281,9 @@ export class UserService {
               nombre: true,
             },
           },
-          RegistroCaja: {
-            include: {
-              ventas: {
-                select: {
-                  id: true, // Solo necesitamos el ID de la venta
-                },
-              },
+          ventas: {
+            select: {
+              id: true,
             },
           },
         },
@@ -301,10 +297,7 @@ export class UserService {
         sucursal: user.sucursal,
         rol: user.rol,
         activo: user.activo,
-        totalVentas: user.RegistroCaja.reduce(
-          (acc, registro) => acc + registro.ventas.length,
-          0,
-        ),
+        totalVentas: user.ventas.length,
       }));
 
       return result;

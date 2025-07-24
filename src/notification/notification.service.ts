@@ -6,7 +6,7 @@ import {
 import { UpdateNotificationDto } from './dto/update-notification.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { WebsocketGateway } from 'src/web-sockets/websocket.gateway';
-import { TipoNotificacion } from '@prisma/client';
+import { Prisma, TipoNotificacion } from '@prisma/client';
 import { NotificationToEmit } from 'src/web-sockets/Types/NotificationTypeSocket';
 import { nuevaSolicitud } from 'src/web-sockets/Types/SolicitudType';
 
@@ -80,33 +80,35 @@ export class NotificationService {
 
   async createOneNotification(
     mensaje: string,
-
     remitenteId: number | null,
     usuarioId: number, // el ID del usuario receptor
     tipoNotificacion: TipoNotificacion,
     referenciaId?: number | null,
+    tx?: Prisma.TransactionClient, // <--- opcional
   ) {
     try {
-      const nuevaNotificacion = await this.prismaService.notificacion.create({
+      const prisma = tx ?? this.prismaService;
+
+      const nuevaNotificacion = await prisma.notificacion.create({
         data: {
           mensaje,
-          remitenteId: remitenteId !== 0 ? remitenteId : null, // Convertir 0 en null,
+          remitenteId: remitenteId !== 0 ? remitenteId : null,
           tipoNotificacion,
           referenciaId,
         },
       });
 
-      // Aquí deberías crear la relación en NotificacionesUsuarios
-      await this.prismaService.notificacionesUsuarios.create({
+      await prisma.notificacionesUsuarios.create({
         data: {
-          usuarioId, // ID del usuario receptor
+          usuarioId,
           notificacionId: nuevaNotificacion.id,
           leido: false,
           eliminado: false,
         },
       });
 
-      // Construir la notificación a emitir en base a la que he creado
+      // Si tienes websockets puedes emitirlo después de confirmar la transacción,
+      // o fuera del transaction para evitar errores.
       const notificationToEmit: NotificationToEmit = {
         id: nuevaNotificacion.id,
         mensaje: nuevaNotificacion.mensaje,
@@ -116,6 +118,7 @@ export class NotificationService {
         fechaCreacion: nuevaNotificacion.fechaCreacion.toISOString(),
       };
 
+      // Recomendado: solo emitir fuera de la transacción principal
       await this.webSocketService.handleEnviarNotificacion(
         notificationToEmit,
         usuarioId,

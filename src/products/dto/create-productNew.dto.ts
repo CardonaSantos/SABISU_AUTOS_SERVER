@@ -1,3 +1,4 @@
+import { RolPrecio, TipoPrecio } from '@prisma/client';
 import {
   IsArray,
   IsInt,
@@ -5,7 +6,7 @@ import {
   IsOptional,
   IsString,
 } from 'class-validator';
-
+//NUEVO FORMATO PARA CREAR PRODUCTO => AHORA EL PRECIO ES UN OBJ CON PRECIO, ORDEN, ROL
 export class CreateNewProductDto {
   @IsString()
   nombre: string; // Nombre del producto
@@ -20,7 +21,7 @@ export class CreateNewProductDto {
   descripcion: string; // Código único del producto
 
   @IsNumber()
-  precioVenta: number[]; // Precio de venta del producto
+  precioVenta: precioProducto[]; // Precio de venta del producto
   @IsNumber()
   creadoPorId: number;
   @IsArray()
@@ -35,4 +36,10 @@ export class CreateNewProductDto {
 
   @IsArray()
   imagenes: string[];
+}
+
+class precioProducto {
+  rol: RolPrecio;
+  orden: number;
+  precio: number;
 }

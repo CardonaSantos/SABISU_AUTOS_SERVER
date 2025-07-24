@@ -8,6 +8,7 @@ import {
   Delete,
   ParseIntPipe,
   Query,
+  Put,
 } from '@nestjs/common';
 import { RequisicionService } from './requisicion.service';
 import { CreateRequisicionDto } from './dto/create-requisicion.dto';
@@ -17,6 +18,7 @@ import {
   RequisitionResponse,
   StockAlertItem,
 } from './utils';
+import { UpdateRequisitionDto } from './dto/update-requisiciones.dto';
 
 @Controller('requisicion')
 export class RequisicionController {
@@ -28,6 +30,13 @@ export class RequisicionController {
     @Query('sucursalId', ParseIntPipe) sucursalId: number,
   ): Promise<StockAlertItem[]> {
     return this.requisicionService.getStockAlerts(sucursalId);
+  }
+
+  @Get('requisicion-to-edit/:requisicionId')
+  getRequisicionToEdit(
+    @Param('requisicionId', ParseIntPipe) requisicionId: number,
+  ): Promise<StockAlertItem[]> {
+    return this.requisicionService.getRequisicionForEdit(requisicionId);
   }
 
   /** Paso C: crear requisición con las líneas seleccionadas */
@@ -57,5 +66,10 @@ export class RequisicionController {
   @Delete(':id')
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.requisicionService.remove(id);
+  }
+
+  @Put('update')
+  async updateRequisicion(@Body() dto: UpdateRequisitionDto) {
+    return this.requisicionService.updateRequisitionWithLines(dto);
   }
 }

@@ -36,9 +36,6 @@ export class AjusteStockController {
     @Param('id', ParseIntPipe) id: number,
     @Body() updateAjusteStockDto: UpdateAjusteStockDto,
   ) {
-    console.log('En el controller del edit llega: ', updateAjusteStockDto);
-    console.log('EL ID DEL STOCK POR PARAM URL: ', id);
-
     return this.ajusteStockService.update(id, updateAjusteStockDto);
   }
 

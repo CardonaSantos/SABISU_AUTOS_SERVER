@@ -1,7 +1,10 @@
 import {
   BadRequestException,
+  HttpException,
+  HttpStatus,
   Injectable,
   InternalServerErrorException,
+  Logger,
   MethodNotAllowedException,
 } from '@nestjs/common';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -17,6 +20,7 @@ import * as csvParser from 'csv-parser';
 
 @Injectable()
 export class ProductsService {
+  private readonly logger = new Logger(ProductsService.name);
   constructor(
     private readonly prisma: PrismaService,
 
@@ -27,10 +31,7 @@ export class ProductsService {
     try {
       console.log('llegando al server:', dto);
 
-      console.log('los imagenes son: ', dto.imagenes);
-
       return await this.prisma.$transaction(async (tx) => {
-        // 1) Crear el producto
         const newProduct = await tx.producto.create({
           data: {
             precioCostoActual: dto.precioCostoActual,
@@ -44,40 +45,40 @@ export class ProductsService {
           },
         });
 
-        // 2) Crear los precios de venta
         const preciosCreados = await Promise.all(
           dto.precioVenta.map((precio) =>
             tx.precioProducto.create({
               data: {
                 productoId: newProduct.id,
-                precio,
+                precio: precio.precio,
                 estado: 'APROBADO',
                 tipo: 'ESTANDAR',
                 creadoPorId: dto.creadoPorId,
                 fechaCreacion: new Date(),
+                orden: precio.orden,
+                rol: precio.rol,
               },
             }),
           ),
         );
 
-        // 3) Si viene stockMinimo, creamos el umbral global con tx
         if (dto.stockMinimo != null) {
-          console.log(
+          this.logger.debug(
             'entrando ala creacion de stock minimo, el producto a añadirle es: ',
             newProduct,
           );
 
-          const minimoStock = await tx.stockThreshold.create({
+          await tx.stockThreshold.create({
             data: {
               productoId: newProduct.id,
               stockMinimo: dto.stockMinimo,
             },
           });
-          console.log('Umbral creado:', minimoStock);
+          this.logger.debug('Lumbra de stock minimo creado');
         }
 
         if (!dto.imagenes?.length) {
-          console.log('No hay imágenes para subir o crear');
+          this.logger.debug('No hay imágenes para subir o crear');
         } else {
           const promesas = dto.imagenes.map((base64) =>
             this.cloudinaryService.subirImagen(base64),
@@ -88,14 +89,9 @@ export class ProductsService {
           for (let idx = 0; idx < resultados.length; idx++) {
             const res = resultados[idx];
             const imagenBase64 = dto.imagenes[idx];
-
             if (res.status === 'fulfilled') {
-              // const url = res.value;
               const { url, public_id } = res.value;
               console.log(`OK: Imagen ${idx} subida → ${url}`);
-
-              // await this.vincularProductoImagen(newProduct.id, url);
-              // await this.vincularProductoImagen(tx, newProduct.id, url);
               await this.vincularProductoImagen(
                 tx,
                 newProduct.id,
@@ -103,7 +99,7 @@ export class ProductsService {
                 public_id,
               );
             } else {
-              console.error(
+              this.logger.error(
                 `Error subiendo imagen [${idx}] (${imagenBase64}):`,
                 res.reason,
               );
@@ -113,16 +109,13 @@ export class ProductsService {
         return { newProduct, preciosCreados };
       });
     } catch (error) {
-      console.error('Error al crear producto con threshold:', error);
+      this.logger.error('Error al crear producto con threshold:', error);
       throw new InternalServerErrorException(
         'No se pudo crear el producto y su stock mínimo',
       );
     }
   }
 
-  // products.service.ts
-
-  // Cambia la firma:
   async vincularProductoImagen(
     tx: Prisma.TransactionClient,
     productoId: number,
@@ -134,7 +127,7 @@ export class ProductsService {
       data: {
         productoId,
         url,
-        public_id: publicId, // ahora lo guardas aquí
+        public_id: publicId,
         altTexto,
       },
     });
@@ -148,6 +141,7 @@ export class ProductsService {
             select: {
               id: true,
               precio: true,
+              rol: true,
             },
           },
           imagenesProducto: {
@@ -159,7 +153,7 @@ export class ProductsService {
           stock: {
             where: {
               cantidad: {
-                gt: 0, // Solo traer productos con stock disponible
+                gt: 0,
               },
               sucursalId: id,
             },
@@ -173,9 +167,33 @@ export class ProductsService {
         },
       });
 
-      return productos;
+      const formattedProducts = productos.map((prod) => ({
+        id: prod.id,
+        nombre: prod.nombre,
+        descripcion: prod.descripcion,
+        codigoProducto: prod.codigoProducto,
+        creadoEn: prod.creadoEn,
+        actualizadoEn: prod.actualizadoEn,
+        stock: prod.stock.map((t) => ({
+          id: t.id,
+          cantidad: t.cantidad,
+          fechaIngreso: t.fechaIngreso,
+          fechaVencimiento: t.fechaVencimiento,
+        })),
+        precios: prod.precios.map((p) => ({
+          id: p.id,
+          precio: p.precio, // now a number
+          rol: p.rol, // matches interface
+        })),
+        imagenesProducto: prod.imagenesProducto.map((img) => ({
+          id: img.id,
+          url: img.url,
+        })),
+      }));
+
+      return formattedProducts;
     } catch (error) {
-      console.error('Error en findAll productos:', error); // Proporcionar más contexto en el error
+      this.logger.error('Error en findAll productos:', error); // Proporcionar más contexto en el error
       throw new InternalServerErrorException('Error al obtener los productos');
     }
   }
@@ -196,6 +214,8 @@ export class ProductsService {
               precio: true,
               tipo: true,
               usado: true,
+              orden: true,
+              rol: true,
             },
           },
           categorias: {
@@ -300,6 +320,9 @@ export class ProductsService {
             select: {
               id: true,
               precio: true,
+              orden: true,
+              rol: true,
+              tipo: true,
             },
           },
         },
@@ -371,7 +394,6 @@ export class ProductsService {
   }
 
   async update(id: number, updateProductDto: UpdateProductDto) {
-    // 1) Traer producto antes de modificar (para historial)
     console.log(
       'Actualizando producto con ID:',
       id,
@@ -425,7 +447,11 @@ export class ProductsService {
           if (price.id) {
             await tx.precioProducto.update({
               where: { id: price.id },
-              data: { precio: price.precio },
+              data: {
+                precio: price.precio,
+                rol: price.rol,
+                orden: price.orden,
+              },
             });
           } else {
             await tx.precioProducto.create({
@@ -435,6 +461,8 @@ export class ProductsService {
                 creadoPorId: updateProductDto.usuarioId,
                 productoId: productoUpdate.id,
                 tipo: 'ESTANDAR',
+                orden: price.orden,
+                rol: price.rol,
               },
             });
           }
@@ -446,14 +474,33 @@ export class ProductsService {
           Number(productoAnterior.precioCostoActual) !==
             Number(productoUpdate.precioCostoActual)
         ) {
-          await tx.historialPrecioCosto.create({
+          const newRegistroCambioPrecio = await tx.historialPrecioCosto.create({
             data: {
-              productoId: productoAnterior.id,
+              motivoCambio: updateProductDto.motivoCambio,
+              sucursal: {
+                connect: {
+                  id: updateProductDto.sucursalId,
+                },
+              },
+              producto: {
+                connect: {
+                  id: productoAnterior.id,
+                },
+              },
               precioCostoAnterior: Number(productoAnterior.precioCostoActual),
               precioCostoNuevo: Number(productoUpdate.precioCostoActual),
-              modificadoPorId: updateProductDto.usuarioId,
+              modificadoPor: {
+                connect: {
+                  id: updateProductDto.modificadoPorId,
+                },
+              },
             },
           });
+
+          this.logger.log(
+            'El registro de cambio de precio es: ',
+            newRegistroCambioPrecio,
+          );
         }
 
         // 2.5) Subida y vinculación de imágenes
@@ -512,6 +559,40 @@ export class ProductsService {
     }
   }
 
+  async removePrice(id: number) {
+    if (!id) {
+      throw new BadRequestException({
+        error: 'ID de precio no proporcionado',
+      });
+    }
+
+    try {
+      const priceToDelete = await this.prisma.precioProducto.delete({
+        where: { id },
+      });
+
+      if (!priceToDelete) {
+        throw new InternalServerErrorException({
+          message: 'Error al eliminar el precio',
+        });
+      }
+
+      // ¡Listo, elimina y retorna éxito!
+      return {
+        message: 'Precio eliminado correctamente',
+        price: priceToDelete,
+        success: true,
+      };
+    } catch (error) {
+      // Siempre lanza, no retornes el error
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException({
+        message: 'Error inesperado',
+        details: error?.message,
+      });
+    }
+  }
+
   async removeImageFromProduct(publicId: string, imageId: number) {
     console.log('el publicId es: ', publicId, ' y el imageId es: ', imageId);
 
@@ -557,165 +638,146 @@ export class ProductsService {
     }
   }
 
-  async loadCSVandImportProducts(
-    filePath: string,
-    dryRun = false,
-  ): Promise<void> {
-    const rows: any[] = [];
-    // 1) Cargar todas las filas en memoria (puedes ir procesándolas fila a fila si el CSV es muy grande).
-    const stream = createReadStream(filePath).pipe(
-      csvParser({
-        separator: ',',
-        mapHeaders: ({ header }) => header.replace(/^\uFEFF/, '').trim(),
-      }),
-    );
-    for await (const row of stream) {
-      rows.push(row);
-    }
-    console.log(`Se leyeron ${rows.length} filas del CSV.`);
+  // async loadCSVandImportProducts(
+  //   filePath: string,
+  //   dryRun = false,
+  // ): Promise<void> {
+  //   const rows: any[] = [];
+  //   // 1) Cargar todas las filas en memoria (puedes ir procesándolas fila a fila si el CSV es muy grande).
+  //   const stream = createReadStream(filePath).pipe(
+  //     csvParser({
+  //       separator: ',',
+  //       mapHeaders: ({ header }) => header.replace(/^\uFEFF/, '').trim(),
+  //     }),
+  //   );
+  //   for await (const row of stream) {
+  //     rows.push(row);
+  //   }
+  //   console.log(`Se leyeron ${rows.length} filas del CSV.`);
 
-    // 2) Procesar cada fila
-    for (const [index, row] of rows.entries()) {
-      // ---------------------------------------------------
-      // 2.1) Leer los campos del CSV y hacer trim donde convenga:
-      // ---------------------------------------------------
-      const codigoProducto = row['codigoProducto']?.trim();
-      const nombre = row['nombre']?.trim();
-      const descripcion = row['descripcion']?.trim() || null;
-      const categoriasRaw = row['categorias']?.trim() || '';
-      const preciosVentaRaw = row['preciosVenta']?.trim() || '';
-      const precioCostoActual = parseFloat(row['precioCostoActual']) || null;
-      const codigoProveedor = row['codigoProveedor']?.trim() || null;
-      // El CSV trae “stockMinimo” (umbral), pero aquí no creamos StockThreshold: lo dejamos en stand-by.
-      const stockMinimoCsv = parseInt(row['stockMinimo'], 10) || null;
+  //   // 2) Procesar cada fila
+  //   for (const [index, row] of rows.entries()) {
+  //     // ---------------------------------------------------
+  //     // 2.1) Leer los campos del CSV y hacer trim donde convenga:
+  //     // ---------------------------------------------------
+  //     const codigoProducto = row['codigoProducto']?.trim();
+  //     const nombre = row['nombre']?.trim();
+  //     const descripcion = row['descripcion']?.trim() || null;
+  //     const categoriasRaw = row['categorias']?.trim() || '';
+  //     const preciosVentaRaw = row['preciosVenta']?.trim() || '';
+  //     const precioCostoActual = parseFloat(row['precioCostoActual']) || null;
+  //     const codigoProveedor = row['codigoProveedor']?.trim() || null;
+  //     // El CSV trae “stockMinimo” (umbral), pero aquí no creamos StockThreshold: lo dejamos en stand-by.
+  //     const stockMinimoCsv = parseInt(row['stockMinimo'], 10) || null;
 
-      // ---------------------------------------------------
-      // 2.2) Validar campos mínimos obligatorios:
-      // ---------------------------------------------------
-      if (!codigoProducto || !nombre) {
-        console.log(
-          `Fila ${index + 1} omitida: faltan “codigoProducto” o “nombre”.`,
-        );
-        continue;
-      }
+  //     // ---------------------------------------------------
+  //     // 2.2) Validar campos mínimos obligatorios:
+  //     // ---------------------------------------------------
+  //     if (!codigoProducto || !nombre) {
+  //       console.log(
+  //         `Fila ${index + 1} omitida: faltan “codigoProducto” o “nombre”.`,
+  //       );
+  //       continue;
+  //     }
 
-      // ---------------------------------------------------
-      // 2.3) Dividir las categorías y hacer upsert (crear si no existe):
-      // ---------------------------------------------------
-      const categoryNames = categoriasRaw
-        .split(',')
-        .map((c: string) => c.trim())
-        .filter((c: string) => c.length > 0);
+  //     const categoryNames = categoriasRaw
+  //       .split(',')
+  //       .map((c: string) => c.trim())
+  //       .filter((c: string) => c.length > 0);
 
-      const categoryIds: number[] = [];
-      for (const catName of categoryNames) {
-        try {
-          // Upsert: si ya existe, lo actualiza (pero no cambia nada), si no, lo crea.
-          const categoria = await this.prisma.categoria.upsert({
-            where: { nombre: catName },
-            create: { nombre: catName },
-            update: {},
-          });
-          categoryIds.push(categoria.id);
-        } catch (e) {
-          console.log(
-            `Error subiendo categoría “${catName}” en fila ${index + 1}: ${e.message}`,
-          );
-        }
-      }
+  //     const categoryIds: number[] = [];
+  //     for (const catName of categoryNames) {
+  //       try {
+  //         // Upsert: si ya existe, lo actualiza (pero no cambia nada), si no, lo crea.
+  //         const categoria = await this.prisma.categoria.upsert({
+  //           where: { nombre: catName },
+  //           create: { nombre: catName },
+  //           update: {},
+  //         });
+  //         categoryIds.push(categoria.id);
+  //       } catch (e) {
+  //         console.log(
+  //           `Error subiendo categoría “${catName}” en fila ${index + 1}: ${e.message}`,
+  //         );
+  //       }
+  //     }
 
-      // ---------------------------------------------------
-      // 2.4) En dryRun sólo registramos en logs qué haríamos y seguimos:
-      // ---------------------------------------------------
-      if (dryRun) {
-        console.log(
-          `[DryRun] Producto a crear: ${nombre} (${codigoProducto}), categorías: [${categoryNames.join(
-            ', ',
-          )}], precios: [${preciosVentaRaw}], costo: ${precioCostoActual}`,
-        );
-        continue;
-      }
+  //     if (dryRun) {
+  //       console.log(
+  //         `[DryRun] Producto a crear: ${nombre} (${codigoProducto}), categorías: [${categoryNames.join(
+  //           ', ',
+  //         )}], precios: [${preciosVentaRaw}], costo: ${precioCostoActual}`,
+  //       );
+  //       continue;
+  //     }
 
-      // ---------------------------------------------------
-      // 2.5) Crear el Producto en la base de datos:
-      // ---------------------------------------------------
-      let productoCreado;
-      try {
-        productoCreado = await this.prisma.producto.create({
-          data: {
-            codigoProducto,
-            nombre,
-            descripcion,
-            precioCostoActual, // Puede ser null si no viene en el CSV
-            codigoProveedor, // Puede ser null si no viene en el CSV
-            // Conectar las categorías existentes/creadas:
-            categorias: {
-              connect: categoryIds.map((id) => ({ id })),
-            },
-            // NOTA: no creamos stockThreshold ni stock aquí porque el CSV no trae sucursal/fechas
-          },
-        });
-        console.log(`✅ Producto creado: ${nombre} (ID ${productoCreado.id})`);
-      } catch (e) {
-        console.log(
-          `❌ Error al crear Producto en fila ${index + 1}: ${e.message}`,
-        );
-        continue;
-      }
+  //     let productoCreado;
+  //     try {
+  //       productoCreado = await this.prisma.producto.create({
+  //         data: {
+  //           codigoProducto,
+  //           nombre,
+  //           descripcion,
+  //           precioCostoActual, // Puede ser null si no viene en el CSV
+  //           codigoProveedor, // Puede ser null si no viene en el CSV
+  //           // Conectar las categorías existentes/creadas:
+  //           categorias: {
+  //             connect: categoryIds.map((id) => ({ id })),
+  //           },
+  //           // NOTA: no creamos stockThreshold ni stock aquí porque el CSV no trae sucursal/fechas
+  //         },
+  //       });
+  //       console.log(`✅ Producto creado: ${nombre} (ID ${productoCreado.id})`);
+  //     } catch (e) {
+  //       console.log(
+  //         `❌ Error al crear Producto en fila ${index + 1}: ${e.message}`,
+  //       );
+  //       continue;
+  //     }
+  //     const preciosArray = preciosVentaRaw
+  //       .split(',')
+  //       .map((p: string) => parseFloat(p.trim()))
+  //       .filter((p: number) => !isNaN(p) && p > 0);
 
-      // ---------------------------------------------------
-      // 2.6) Si el CSV trae “stockMinimo” y tienes una tabla StockThreshold, podrías:
-      //     await prisma.stockThreshold.create({ data: { productoId: productoCreado.id, stockMinimo: stockMinimoCsv } });
-      // ---------------------------------------------------
-      // (Lo dejamos comentado porque no compartiste la definición de StockThreshold.)
+  //     for (const precio of preciosArray) {
+  //       try {
+  //         await this.prisma.precioProducto.create({
+  //           data: {
+  //             productoId: productoCreado.id,
+  //             precio,
+  //             estado: 'APROBADO', // o ‘APROBADO’ si quieres que quede disponible de una vez
+  //             usado: false,
+  //             tipo: 'ESTANDAR',
+  //             // creadoPorId: null,     // si quieres registrar qué usuario lo puso, puedes pasar un ID aquí
+  //           },
+  //         });
+  //       } catch (e) {
+  //         console.log(
+  //           `❌ Error al crear PrecioProducto para ${productoCreado.id} con precio ${precio}: ${e.message}`,
+  //         );
+  //       }
+  //     }
 
-      // ---------------------------------------------------
-      // 2.7) Crear registros PrecioProducto para cada precio en “preciosVenta”:
-      // ---------------------------------------------------
-      const preciosArray = preciosVentaRaw
-        .split(',')
-        .map((p: string) => parseFloat(p.trim()))
-        .filter((p: number) => !isNaN(p) && p > 0);
+  //     // ---------------------------------------------------
+  //     // 2.8) (Opcional) Si tuvieras un stock inicial en CSV (ej: campo “cantidad” y “fechaIngreso”),
+  //     //      aquí harías algo como:
+  //     //
+  //     // await prisma.stock.create({
+  //     //   data: {
+  //     //     productoId: productoCreado.id,
+  //     //     cantidad: cantidadInicialCsv,
+  //     //     costoTotal: cantidadInicialCsv * (precioCostoActual || 0),
+  //     //     fechaIngreso: new Date(),         // o guardarlo desde el CSV si existe
+  //     //     precioCosto: precioCostoActual,   // o un campo separado de “costo por unidad” si vienes del CSV
+  //     //     sucursalId: tuSucursalPorDefecto,  // o un valor que venga en el CSV
+  //     //   },
+  //     // });
+  //     //
+  //     // Como no tenemos esos datos en tu CSV, lo omitimos. Si luego agregas “cantidad” y “sucursalId”,
+  //     // saca esta sección del comentario y adapta los campos.
+  //     // ---------------------------------------------------
+  //   }
 
-      for (const precio of preciosArray) {
-        try {
-          await this.prisma.precioProducto.create({
-            data: {
-              productoId: productoCreado.id,
-              precio,
-              estado: 'APROBADO', // o ‘APROBADO’ si quieres que quede disponible de una vez
-              usado: false,
-              tipo: 'ESTANDAR',
-              // creadoPorId: null,     // si quieres registrar qué usuario lo puso, puedes pasar un ID aquí
-            },
-          });
-        } catch (e) {
-          console.log(
-            `❌ Error al crear PrecioProducto para ${productoCreado.id} con precio ${precio}: ${e.message}`,
-          );
-        }
-      }
-
-      // ---------------------------------------------------
-      // 2.8) (Opcional) Si tuvieras un stock inicial en CSV (ej: campo “cantidad” y “fechaIngreso”),
-      //      aquí harías algo como:
-      //
-      // await prisma.stock.create({
-      //   data: {
-      //     productoId: productoCreado.id,
-      //     cantidad: cantidadInicialCsv,
-      //     costoTotal: cantidadInicialCsv * (precioCostoActual || 0),
-      //     fechaIngreso: new Date(),         // o guardarlo desde el CSV si existe
-      //     precioCosto: precioCostoActual,   // o un campo separado de “costo por unidad” si vienes del CSV
-      //     sucursalId: tuSucursalPorDefecto,  // o un valor que venga en el CSV
-      //   },
-      // });
-      //
-      // Como no tenemos esos datos en tu CSV, lo omitimos. Si luego agregas “cantidad” y “sucursalId”,
-      // saca esta sección del comentario y adapta los campos.
-      // ---------------------------------------------------
-    }
-
-    console.log('📦 ¡Importación de productos finalizada!');
-  }
+  //   console.log('📦 ¡Importación de productos finalizada!');
+  // }
 }

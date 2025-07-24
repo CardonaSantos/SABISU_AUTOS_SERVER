@@ -14,7 +14,7 @@ export class CloudinaryService {
     return new Promise((resolve, reject) => {
       cloudinary.uploader.upload(
         image,
-        { folder: 'PRODUCTOS_FERRETERIA' },
+        { folder: 'PRODUCTOS_SABISA' },
         (error, result) => {
           if (error) return reject(error);
           if (!result?.secure_url || !result?.public_id) {
