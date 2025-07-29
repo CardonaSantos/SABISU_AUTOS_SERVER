@@ -29,6 +29,7 @@ export class ProductsService {
   ) {}
   async create(dto: CreateNewProductDto) {
     try {
+      console.log('ESTO ES UNA PETICION PARA CREAR UN SOLO PRODUCTO');
       console.log('llegando al server:', dto);
 
       return await this.prisma.$transaction(async (tx) => {

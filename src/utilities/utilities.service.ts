@@ -42,11 +42,11 @@ export class UtilitiesService {
         tx.stock.create({
           data: {
             cantidad: prod.cantidad,
+            cantidadInicial: prod.cantidad,
             costoTotal: prod.costoTotal,
             fechaIngreso: prod.fechaIngreso,
             fechaVencimiento: prod?.fechaExpiracion,
             precioCosto: prod.precioCosto,
-            cantidadInicial: prod.cantidad,
             sucursal: { connect: { id: prod.sucursalId } },
             producto: { connect: { id: prod.productoId } },
             entregaStock: entregaStock

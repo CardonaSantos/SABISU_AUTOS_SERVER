@@ -91,6 +91,17 @@ export class HistorialStockController {
     });
   }
 
+  @Get('entregas-stock')
+  async getEntregasStock(
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page = 1,
+    @Query('pageSize', new DefaultValuePipe(20), ParseIntPipe) pageSize = 20,
+  ) {
+    return this.historialStockService.getEntregaStock({
+      page,
+      pageSize,
+    });
+  }
+
   @Get()
   async findAll(
     @Query('tipo') tipo?: TipoMovimientoStock,
@@ -102,5 +113,10 @@ export class HistorialStockController {
       page,
       pageSize,
     });
+  }
+
+  @Delete()
+  async deleteAll() {
+    return this.historialStockService.deleteAll();
   }
 }

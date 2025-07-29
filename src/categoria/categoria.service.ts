@@ -13,8 +13,12 @@ export class CategoriaService {
   constructor(private readonly prisma: PrismaService) {}
   async create(createCategoriaDto: CreateCategoriaDto) {
     try {
+      console.log('La data para el create es: ', createCategoriaDto);
+      const { nombre } = createCategoriaDto;
       const categoria = await this.prisma.categoria.create({
-        data: createCategoriaDto,
+        data: {
+          nombre: nombre,
+        },
       });
       return categoria;
     } catch (error) {

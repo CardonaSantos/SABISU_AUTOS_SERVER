@@ -361,4 +361,48 @@ export class HistorialStockTrackerService {
 
     console.log('el nuevo registro es: ', trackerTransferencia);
   }
+
+  /**
+   *
+   * @param tx
+   * @param lineas
+   * @param sucursalId
+   * @param usuarioId
+   * @param entregaID
+   * @param tipo
+   * @param comentario
+   */
+  async trackeEntregaStock(
+    tx: Prisma.TransactionClient,
+    lineas: {
+      productoId: number;
+      cantidadVendida: number;
+      cantidadAnterior: number;
+    }[],
+    sucursalId: number,
+    usuarioId: number,
+    entregaID: number,
+    tipo: TipoMovimientoStock = TipoMovimientoStock.ENTREGA_STOCK,
+    comentario: string = '',
+  ) {
+    await Promise.all(
+      lineas.map(async (prod) => {
+        const cantidadNueva = prod.cantidadAnterior + prod.cantidadVendida;
+
+        await tx.historialStock.create({
+          data: {
+            producto: { connect: { id: prod.productoId } },
+            sucursal: { connect: { id: sucursalId } },
+            usuario: { connect: { id: usuarioId } },
+            tipo,
+            fechaCambio: dayjs().tz('America/Guatemala').toDate(),
+            cantidadAnterior: prod.cantidadAnterior,
+            cantidadNueva,
+            comentario: comentario || `Registro por entrega #${entregaID}`,
+            entregaStock: { connect: { id: entregaID } },
+          },
+        });
+      }),
+    );
+  }
 }

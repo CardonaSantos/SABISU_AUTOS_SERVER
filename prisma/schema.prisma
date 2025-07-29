@@ -1031,7 +1031,7 @@ model HistorialStock {
 
   //rastrear venta
   ventaId Int?
-  venta VentaProducto? @relation(fields: [ventaId], references: [id], onDelete: SetNull)
+  venta Venta? @relation(fields: [ventaId], references: [id], onDelete: SetNull)
   //rastrear ajuste stock 
   ajusteStockId Int?
   ajusteStock AjusteStock? @relation(fields: [ajusteStockId], references: [id], onDelete: SetNull)
@@ -1087,7 +1087,6 @@ model Venta {
   telefonoClienteFinal String?
   direccionClienteFinal String?
   imei                String?        
-  @@unique([imei, id]) // Permite null en `imei` sin conflicto de unicidad 
   registroCajaId    Int?        // ID del turno de caja al que pertenece la venta
   registroCaja      RegistroCaja? @relation(fields: [registroCajaId], references: [id], onDelete: SetNull)
   // Relación opcional con una VentaCuota
@@ -1096,7 +1095,20 @@ model Venta {
   usuarioId           Int?         // Relación con el usuario que realizó la venta
   usuario             Usuario?     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
   //relacion con el movimiento
+  movimientosStock HistorialStock[]
+  //
+  referenciaPago    String?   @unique
+  tipoComprobante   TipoComprobante @default(RECIBO)
+  @@unique([imei, id]) // Permite null en `imei` sin conflicto de unicidad 
+
 }
+
+/// Enum para el tipo de comprobante
+enum TipoComprobante {
+  FACTURA
+  RECIBO
+}
+
 
 model TransferenciaProducto {
   id                Int         @id @default(autoincrement())
@@ -1144,7 +1156,6 @@ model VentaProducto {
   //NUEVA PROPIEDAD QUE REGISTRA EL PRECIO AL QUE SE VENDIÓ EL PRODUCTO, SUSTITUTO DE DE PRECIOvENTA EN TABLA PRODUCTO
   precioVenta     Float       // Precio de venta del producto en el momento de la venta
   // VentaCuota VentaCuota[]
-  movimientosStock HistorialStock[]
 }
 
 model Proveedor {

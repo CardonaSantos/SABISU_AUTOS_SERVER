@@ -16,10 +16,9 @@ import { UpdateVentaDto } from './dto/update-venta.dto';
 export class VentaController {
   constructor(private readonly ventaService: VentaService) {}
 
+  // PARA LA CREACION DE VENTAS NORMALES
   @Post()
   async create(@Body() createVentaDto: CreateVentaDto) {
-    console.log('Los credenciales en controller son: ', createVentaDto);
-
     return await this.ventaService.create(createVentaDto);
   }
 

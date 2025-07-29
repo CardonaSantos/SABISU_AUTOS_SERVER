@@ -14,6 +14,8 @@ export class EntregaStockService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(createEntregaStockDto: CreateEntregaStockDto) {
+    console.log('Log si el servicio se usa cuando registramos un stock nuevo');
+
     try {
       const entregaStock = await this.prisma.entregaStock.create({
         data: {
@@ -95,54 +97,6 @@ export class EntregaStockService {
       );
     }
   }
-
-  // async findAllDeliveryStock(sucursalId: number) {
-  //   try {
-  //     const deliveryStocks = await this.prisma.entregaStock.findMany({
-  //       where: {
-  //         id: sucursalId,
-  //       },
-  //       include: {
-  //         proveedor: {
-  //           select: {
-  //             id: true,
-  //             nombre: true,
-  //             correo: true,
-  //             telefono: true,
-  //           },
-  //         },
-  //         usuarioRecibido: {
-  //           select: {
-  //             id: true,
-  //             nombre: true,
-  //             rol: true,
-  //           },
-  //         },
-  //         stockEntregado: true,
-  //         sucursal: {
-  //           select: {
-  //             nombre: true,
-  //             id: true,
-  //             direccion: true,
-  //           },
-  //         },
-  //       },
-  //     });
-
-  //     if (!deliveryStocks) {
-  //       throw new NotFoundException(
-  //         'Error al encontrar los registros de stock',
-  //       );
-  //     }
-
-  //     return deliveryStocks;
-  //   } catch (error) {
-  //     console.error(error);
-  //     throw new InternalServerErrorException(
-  //       'Error al obtener las entregas de stock',
-  //     );
-  //   }
-  // }
 
   async findAllDeliveryStock(sucursalId: number) {
     try {

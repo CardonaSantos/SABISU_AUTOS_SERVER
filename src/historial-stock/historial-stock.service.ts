@@ -437,98 +437,80 @@ export class HistorialStockService {
   }
   //para salida de ventas
   async getSalidaVenta(params: { page?: number; pageSize?: number }) {
-    const page = params.page ?? 1;
-    const pageSize = params.pageSize ?? 20;
+    const { page = 1, pageSize = 20 } = params;
     const skip = (page - 1) * pageSize;
     const take = pageSize;
 
     const where = { tipo: TipoMovimientoStock.SALIDA_VENTA };
-    const select = {
-      id: true,
-      comentario: true,
-      usuario: {
-        select: { id: true, nombre: true, rol: true, correo: true },
-      },
-      cantidadAnterior: true,
-      cantidadNueva: true,
-      tipo: true,
-      fechaCambio: true,
-      sucursal: {
-        select: { id: true, nombre: true, direccion: true },
-      },
-      producto: {
-        select: {
-          id: true,
-          nombre: true,
-          codigoProducto: true,
+    const registros = await this.prisma.historialStock.findMany({
+      where,
+      orderBy: { fechaCambio: 'desc' },
+      skip,
+      take,
+      select: {
+        id: true,
+        comentario: true,
+        cantidadAnterior: true,
+        cantidadNueva: true,
+        tipo: true,
+        fechaCambio: true,
+        sucursal: { select: { id: true, nombre: true, direccion: true } },
+        usuario: {
+          select: { id: true, nombre: true, rol: true, correo: true },
         },
-      },
-      venta: {
-        select: {
-          id: true,
-          cantidad: true,
-          creadoEn: true,
-          precioVenta: true,
-          producto: {
-            select: {
-              id: true,
-              nombre: true,
-              codigoProducto: true,
-            },
-          },
-          venta: {
-            select: {
-              id: true,
-              metodoPago: true,
-              cliente: {
-                select: {
-                  id: true,
-                  nombre: true,
-                  telefono: true,
-                },
-              },
-              fechaVenta: true,
-              sucursal: {
-                select: {
-                  id: true,
-                  nombre: true,
-                  direccion: true,
-                },
+        producto: { select: { id: true, nombre: true, codigoProducto: true } },
+
+        // <-- Aquí la nueva relación a Venta:
+        venta: {
+          select: {
+            id: true,
+            fechaVenta: true,
+            horaVenta: true,
+            totalVenta: true,
+            imei: true,
+            // Si usas venta.metodoPagoId como FK:
+            metodoPago: { select: { id: true, metodoPago: true, monto: true } },
+            // Datos del cliente:
+            cliente: {
+              select: {
+                id: true,
+                nombre: true,
+                telefono: true,
+                direccion: true,
               },
             },
+            // Y por fin, el detalle de productos vendidos
+            productos: {
+              select: {
+                id: true,
+                productoId: true,
+                cantidad: true,
+                precioVenta: true,
+                producto: {
+                  select: {
+                    id: true,
+                    nombre: true,
+                    codigoProducto: true,
+                  },
+                },
+              },
+            },
+            sucursal: {
+              select: { id: true, nombre: true, direccion: true },
+            },
           },
         },
       },
+    });
+
+    const totalItems = await this.prisma.historialStock.count({ where });
+    return {
+      data: registros,
+      page,
+      pageSize,
+      totalItems,
+      totalPages: Math.ceil(totalItems / pageSize),
     };
-
-    try {
-      // 1) Registros paginados
-      const registros = await this.prisma.historialStock.findMany({
-        where,
-        orderBy: { fechaCambio: 'desc' },
-        skip,
-        take,
-        select,
-      });
-
-      // 2) Total de items
-      const totalItems = await this.prisma.historialStock.count({ where });
-
-      // 3) Retorno
-      return {
-        data: registros,
-        page,
-        pageSize,
-        totalItems,
-        totalPages: Math.ceil(totalItems / pageSize),
-      };
-    } catch (error) {
-      this.logger.error('Error al obtener salidas de venta:', error);
-      if (error instanceof HttpException) throw error;
-      throw new InternalServerErrorException(
-        'Error inesperado al cargar historial de salidas de venta',
-      );
-    }
   }
 
   //para austes stocks
@@ -997,6 +979,17 @@ export class HistorialStockService {
       throw new InternalServerErrorException(
         'Error inesperado al cargar historial de entregas de stock',
       );
+    }
+  }
+
+  //ELIMINAR TODOS
+  async deleteAll() {
+    try {
+      let registrosEliminados = await this.prisma.historialStock.deleteMany();
+      console.log('Los registros elimnados son: ', registrosEliminados);
+      return registrosEliminados;
+    } catch (error) {
+      console.log(error);
     }
   }
 }

@@ -31,60 +31,80 @@ export class StockService {
   ) {}
 
   async create(createStockDto: StockEntryDTO) {
+    const { proveedorId, stockEntries, sucursalId, recibidoPorId } =
+      createStockDto;
+
     try {
-      const { proveedorId, stockEntries, sucursalId, recibidoPorId } =
-        createStockDto;
-
-      console.log('Los otros ids son: ', {
-        proveedorId,
-        stockEntries,
-        sucursalId,
-        recibidoPorId,
-      });
-
-      // Calcular el costo total de la entrega sumando los productos
+      // Calcular el costo total de la entrega
       const costoStockEntrega = stockEntries.reduce(
         (total, entry) => total + entry.cantidad * entry.precioCosto,
         0,
       );
 
-      // Crear el registro de EntregaStock
-      const newRegistDeliveryStock = await this.prisma.entregaStock.create({
+      // Crear la entrega de stock
+      const entregaStock = await this.prisma.entregaStock.create({
         data: {
-          proveedorId: proveedorId,
+          proveedorId,
           montoTotal: costoStockEntrega,
-          // Agregamos el usuario que recibe si está disponible
-          recibidoPorId: recibidoPorId,
-          sucursalId: sucursalId,
+          recibidoPorId,
+          sucursalId,
         },
       });
 
-      console.log('El nuevo registro de entrega es: ', newRegistDeliveryStock);
+      const historialTrackers = [];
 
-      // Crear registros de Stock asociados a la entrega
       for (const entry of stockEntries) {
-        const fechaVencimientoLocal = dayjs
-          .tz(entry.fechaVencimiento, 'America/Guatemala')
-          .format();
+        // Obtener cantidad actual del producto en esa sucursal
+        const sumaStockActual = await this.prisma.stock.aggregate({
+          where: {
+            productoId: entry.productoId,
+            sucursalId,
+          },
+          _sum: {
+            cantidad: true,
+          },
+        });
 
+        const cantidadAnterior = sumaStockActual._sum.cantidad ?? 0;
+        const cantidadNueva = cantidadAnterior + entry.cantidad;
+
+        // Crear el registro de stock
         const registroStock = await this.prisma.stock.create({
           data: {
             productoId: entry.productoId,
             cantidad: entry.cantidad,
+            cantidadInicial: entry.cantidad,
             costoTotal: entry.precioCosto * entry.cantidad,
             fechaIngreso: entry.fechaIngreso,
-            fechaVencimiento: fechaVencimientoLocal,
+            fechaVencimiento: dayjs
+              .tz(entry.fechaVencimiento, 'America/Guatemala')
+              .toDate(),
             precioCosto: entry.precioCosto,
-            entregaStockId: newRegistDeliveryStock.id, // Asociar con la entrega
-            sucursalId: sucursalId,
+            entregaStockId: entregaStock.id,
+            sucursalId,
           },
         });
 
-        console.log('El registro de stock es: ', registroStock);
+        // Armar la data para trackeo
+        historialTrackers.push({
+          productoId: entry.productoId,
+          cantidadAnterior,
+          cantidadVendida: entry.cantidad,
+        });
       }
 
-      console.log('Entrega y stock registrados correctamente.');
-      return newRegistDeliveryStock;
+      // Trackear entrega de stock por producto
+      await this.tracker.trackeEntregaStock(
+        this.prisma, // no se usa transacción por ahora
+        historialTrackers,
+        sucursalId,
+        recibidoPorId,
+        entregaStock.id,
+        'ENTREGA_STOCK',
+        `Registro generado por entrega #${entregaStock.id}`,
+      );
+
+      return entregaStock;
     } catch (error) {
       console.error('Error al crear la entrega de stock:', error);
       throw new InternalServerErrorException(

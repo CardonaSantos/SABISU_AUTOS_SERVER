@@ -1,4 +1,4 @@
-import { MetodoPago } from '@prisma/client';
+import { MetodoPago, TipoComprobante } from '@prisma/client';
 import {
   IsDate,
   IsArray,
@@ -10,6 +10,13 @@ import {
 } from 'class-validator';
 
 export class CreateVentaDto {
+  @IsString()
+  @IsOptional()
+  referenciaPago: string;
+
+  @IsEnum(TipoComprobante)
+  tipoComprobante: TipoComprobante;
+
   @IsNumber()
   @IsOptional()
   clienteId?: number; // Si es un cliente existente

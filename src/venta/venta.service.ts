@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { CreateVentaDto } from './dto/create-venta.dto';
@@ -18,6 +19,7 @@ import { SoloIDProductos } from 'src/recepcion-requisiciones/dto/create-venta-tr
 @Injectable()
 export class VentaService {
   //
+  private logger = new Logger(VentaService.name);
   constructor(
     private readonly prisma: PrismaService,
     private readonly clienteService: ClientService, // Inyección del servicio Cliente
@@ -38,8 +40,16 @@ export class VentaService {
       imei,
       observaciones,
       usuarioId,
+      tipoComprobante,
+      referenciaPago,
     } = createVentaDto;
 
+    this.logger.log('La reference es: ', referenciaPago);
+    this.logger.log('La tipoComprobante es: ', tipoComprobante);
+    let referenciaPagoValid: string | null = null;
+    if (referenciaPago && referenciaPago.trim() !== '') {
+      referenciaPagoValid = referenciaPago.trim();
+    }
     try {
       return await this.prisma.$transaction(async (tx) => {
         const usuariosNotif = await tx.usuario.findMany({
@@ -50,7 +60,7 @@ export class VentaService {
         let clienteConnect: { connect: { id: number } } | undefined;
         if (clienteId) {
           clienteConnect = { connect: { id: clienteId } };
-        } else if (nombre && telefono) {
+        } else if (nombre) {
           const nuevoCliente = await tx.cliente.create({
             data: { nombre, dpi, telefono, direccion, observaciones },
           });
@@ -165,6 +175,8 @@ export class VentaService {
         );
         const venta = await tx.venta.create({
           data: {
+            tipoComprobante: tipoComprobante,
+            referenciaPago: referenciaPagoValid,
             usuario: { connect: { id: usuarioId } },
             cliente: clienteConnect,
             horaVenta: new Date(),
@@ -253,23 +265,65 @@ export class VentaService {
   async findAllSaleSucursal(id: number) {
     try {
       const ventas = await this.prisma.venta.findMany({
-        where: {
-          sucursalId: id,
-        },
-        include: {
-          cliente: true,
-          metodoPago: true,
-          productos: {
-            include: {
-              producto: true,
+        where: { sucursalId: id },
+        orderBy: { fechaVenta: 'desc' },
+        select: {
+          id: true,
+          clienteId: true,
+          cliente: {
+            select: {
+              id: true,
+              dpi: true,
+              nombre: true,
+              telefono: true,
+              direccion: true,
+              creadoEn: true,
+              actualizadoEn: true,
+              departamentoId: true,
+              departamento: { select: { id: true, nombre: true } },
+              municipio: { select: { id: true, nombre: true } },
             },
           },
-        },
-        orderBy: {
-          fechaVenta: 'desc',
+          fechaVenta: true,
+          horaVenta: true,
+          productos: {
+            select: {
+              id: true,
+              ventaId: true,
+              productoId: true,
+              cantidad: true,
+              creadoEn: true,
+              precioVenta: true,
+              producto: {
+                select: {
+                  id: true,
+                  nombre: true,
+                  descripcion: true,
+                  codigoProducto: true,
+                  creadoEn: true,
+                  actualizadoEn: true,
+                },
+              },
+            },
+          },
+          totalVenta: true,
+          metodoPago: {
+            select: {
+              id: true,
+              ventaId: true,
+              monto: true,
+              metodoPago: true,
+              fechaPago: true,
+            },
+          },
+          nombreClienteFinal: true,
+          telefonoClienteFinal: true,
+          direccionClienteFinal: true,
+          referenciaPago: true,
+          tipoComprobante: true,
         },
       });
-      return ventas;
+      return ventas; // ya coincide con tu `Venta[]` en TS
     } catch (error) {
       console.error(error);
       throw new InternalServerErrorException('Error al obtener las ventas');
