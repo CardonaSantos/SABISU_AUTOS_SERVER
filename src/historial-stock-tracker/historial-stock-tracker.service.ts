@@ -405,4 +405,43 @@ export class HistorialStockTrackerService {
       }),
     );
   }
+
+  /**
+   *
+   * @param tx
+   * @param productoId
+   * @param sucursalId
+   * @param usuarioId
+   * @param garantiaId
+   * @param tipo
+   * @param comentario
+   * @param cantidadAnterior
+   * @param cantidadVendida
+   */
+  async trackerGarantia(
+    tx: Prisma.TransactionClient,
+    productoId: number,
+    sucursalId: number,
+    usuarioId: number,
+    garantiaId: number,
+    tipo: TipoMovimientoStock = TipoMovimientoStock.GARANTIA,
+    comentario: string = '',
+    cantidadAnterior: number,
+    cantidadDevuelta: number,
+  ) {
+    const cantidadNueva = cantidadAnterior + cantidadDevuelta;
+    await tx.historialStock.create({
+      data: {
+        producto: { connect: { id: productoId } },
+        sucursal: { connect: { id: sucursalId } },
+        usuario: { connect: { id: usuarioId } },
+        tipo,
+        fechaCambio: dayjs().tz('America/Guatemala').toDate(),
+        cantidadAnterior,
+        cantidadNueva,
+        comentario: comentario || `Garantía #${garantiaId}`,
+        garantia: { connect: { id: garantiaId } },
+      },
+    });
+  }
 }

@@ -49,6 +49,8 @@ import { HistorialStockTrackerModule } from './historial-stock-tracker/historial
 import { RecepcionRequisicionesModule } from './recepcion-requisiciones/recepcion-requisiciones.module';
 import { UtilitiesModule } from './utilities/utilities.module';
 import { HistorialStockModule } from './historial-stock/historial-stock.module';
+import { PedidosModule } from './pedidos/pedidos.module';
+import { MovimientoCajaModule } from './movimiento-caja/movimiento-caja.module';
 
 @Module({
   imports: [
@@ -101,6 +103,8 @@ import { HistorialStockModule } from './historial-stock/historial-stock.module';
     RecepcionRequisicionesModule,
     UtilitiesModule,
     HistorialStockModule,
+    PedidosModule,
+    MovimientoCajaModule,
   ],
   controllers: [AppController],
   providers: [AppService, CloudinaryProvider],

@@ -320,15 +320,12 @@ export class AnalyticsService {
   }
 
   async getSucursalesSummary() {
-    // Aquí pedimos todas las sucursales e incluimos el registro de SucursalSaldo
     const sucursales = await this.prisma.sucursal.findMany({
       include: {
-        SucursalSaldo: true,
+        saldosDiarios: true,
       },
     });
 
-    // Opcionalmente podrías hacer cálculos o mapear los datos,
-    // pero por ahora simplemente retornamos todo tal cual
     return sucursales;
   }
 }

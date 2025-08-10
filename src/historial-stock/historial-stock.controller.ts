@@ -102,6 +102,17 @@ export class HistorialStockController {
     });
   }
 
+  @Get('garantias-stock')
+  async getGaratantiasStock(
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page = 1,
+    @Query('pageSize', new DefaultValuePipe(20), ParseIntPipe) pageSize = 20,
+  ) {
+    return this.historialStockService.getGarantiasStock({
+      page,
+      pageSize,
+    });
+  }
+
   @Get()
   async findAll(
     @Query('tipo') tipo?: TipoMovimientoStock,

@@ -319,21 +319,21 @@ export class RepairService {
         reparacionRegistro,
       );
 
-      if (nuevoRegistroReparacion) {
-        await this.prisma.sucursalSaldo.update({
-          where: {
-            sucursalId: closeRegistRepairDTO.sucursalId,
-          },
-          data: {
-            saldoAcumulado: {
-              increment: Number(closeRegistRepairDTO.montoPagado),
-            },
-            totalIngresos: {
-              increment: Number(closeRegistRepairDTO.montoPagado),
-            },
-          },
-        });
-      }
+      // if (nuevoRegistroReparacion) {
+      //   await this.prisma.sucursalSaldo.update({
+      //     where: {
+      //       sucursalId: closeRegistRepairDTO.sucursalId,
+      //     },
+      //     data: {
+      //       saldoAcumulado: {
+      //         increment: Number(closeRegistRepairDTO.montoPagado),
+      //       },
+      //       totalIngresos: {
+      //         increment: Number(closeRegistRepairDTO.montoPagado),
+      //       },
+      //     },
+      //   });
+      // }
       console.log('el registro de reparacion es: ', nuevoRegistroReparacion);
 
       return nuevoRegistroReparacion;

@@ -212,13 +212,13 @@ export class VentaService {
           `Registro generado por venta número #${venta.id}`,
         );
 
-        await tx.sucursalSaldo.update({
-          where: { sucursalId },
-          data: {
-            saldoAcumulado: { increment: totalVenta },
-            totalIngresos: { increment: totalVenta },
-          },
-        });
+        // await tx.sucursalSaldo.update({
+        //   where: { sucursalId },
+        //   data: {
+        //     saldoAcumulado: { increment: totalVenta },
+        //     totalIngresos: { increment: totalVenta },
+        //   },
+        // });
         const pago = await tx.pago.create({
           data: {
             metodoPago: metodoPago || 'CONTADO',
@@ -294,6 +294,7 @@ export class VentaService {
               cantidad: true,
               creadoEn: true,
               precioVenta: true,
+              estado: true,
               producto: {
                 select: {
                   id: true,
@@ -436,6 +437,107 @@ export class VentaService {
     } catch (error) {
       console.error(error);
       throw new InternalServerErrorException('Error al eliminar las ventas');
+    }
+  }
+
+  async getVentasToGarantia() {
+    try {
+      const ventasToGarantiaSelect = await this.prisma.venta.findMany({
+        orderBy: {
+          fechaVenta: 'desc',
+        },
+        select: {
+          id: true,
+          imei: true,
+          fechaVenta: true,
+          metodoPago: {
+            select: {
+              metodoPago: true,
+            },
+          },
+          referenciaPago: true,
+          tipoComprobante: true,
+          sucursal: {
+            select: {
+              id: true,
+              nombre: true,
+              direccion: true,
+            },
+          },
+          usuario: {
+            select: {
+              id: true,
+              nombre: true,
+              correo: true,
+              rol: true,
+            },
+          },
+          productos: {
+            select: {
+              estado: true,
+              id: true,
+              cantidad: true,
+              precioVenta: true,
+              producto: {
+                select: {
+                  id: true,
+                  nombre: true,
+                  codigoProducto: true,
+                  descripcion: true,
+                },
+              },
+            },
+          },
+
+          cliente: {
+            select: {
+              id: true,
+              nombre: true,
+            },
+          },
+        },
+      });
+      console.log('las ventas son: ', ventasToGarantiaSelect.length);
+
+      const dataFormatt = ventasToGarantiaSelect.map((venta) => ({
+        id: venta.id,
+        imei: venta.imei,
+        fechaVenta: venta.fechaVenta,
+        metodoPago: venta.metodoPago?.metodoPago ?? '—',
+        referenciaPago: venta.referenciaPago,
+        tipoComprobante: venta.tipoComprobante,
+        cliente: {
+          id: venta.cliente?.id ?? null,
+          nombre: venta.cliente?.nombre ?? 'CF',
+        },
+        usuario: {
+          id: venta?.usuario?.id,
+          nombre: venta?.usuario?.nombre,
+          rol: venta?.usuario?.rol,
+          correo: venta?.usuario?.correo,
+        },
+        sucursal: {
+          id: venta.sucursal.id,
+          nombre: venta.sucursal.nombre,
+          direccion: venta.sucursal.direccion,
+        },
+        productos: venta.productos.map((linea) => ({
+          id: linea.id,
+          cantidad: linea.cantidad,
+          precioVenta: linea.precioVenta,
+          estado: linea.estado,
+          producto: {
+            id: linea.producto.id,
+            nombre: linea.producto.nombre,
+            descripcion: linea.producto.descripcion,
+            codigoProducto: linea.producto.codigoProducto,
+          },
+        })),
+      }));
+      return dataFormatt;
+    } catch (error) {
+      console.log('El error es: ', error);
+      throw error;
     }
   }
 

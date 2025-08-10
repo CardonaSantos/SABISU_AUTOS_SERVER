@@ -52,6 +52,11 @@ export class VentaController {
     return await this.ventaService.findOneSale(id);
   }
 
+  @Get('/venta-to-garantia')
+  async getVentasToGarantia() {
+    return await this.ventaService.getVentasToGarantia();
+  }
+
   @Patch(':id')
   async update(
     @Param('id', ParseIntPipe) id: number,

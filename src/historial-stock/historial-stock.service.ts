@@ -982,6 +982,104 @@ export class HistorialStockService {
     }
   }
 
+  //Para garantias tracker
+  async getGarantiasStock(params: { page?: number; pageSize?: number }) {
+    const page = params.page ?? 1;
+    const pageSize = params.pageSize ?? 20;
+    const skip = (page - 1) * pageSize;
+    const take = pageSize;
+
+    const where = { tipo: TipoMovimientoStock.GARANTIA };
+    const select = {
+      id: true,
+      comentario: true,
+      usuario: {
+        select: { id: true, nombre: true, correo: true, rol: true },
+      },
+      cantidadAnterior: true,
+      cantidadNueva: true,
+      tipo: true,
+      fechaCambio: true,
+      sucursal: {
+        select: { id: true, nombre: true, direccion: true },
+      },
+      producto: {
+        select: {
+          id: true,
+          nombre: true,
+          codigoProducto: true,
+          codigoProveedor: true,
+          categorias: true,
+          descripcion: true,
+        },
+      },
+      garantia: {
+        select: {
+          id: true,
+          creadoEn: true,
+          cliente: {
+            select: {
+              id: true,
+              nombre: true,
+              direccion: true,
+              telefono: true,
+            },
+          },
+          cantidadDevuelta: true,
+          comentario: true,
+          descripcionProblema: true,
+          estado: true,
+          fechaRecepcion: true,
+          usuarioRecibe: {
+            select: {
+              id: true,
+              nombre: true,
+              correo: true,
+              rol: true,
+            },
+          },
+          producto: {
+            select: {
+              id: true,
+              nombre: true,
+              codigoProducto: true,
+              descripcion: true,
+            },
+          },
+        },
+      },
+    };
+
+    try {
+      // 1) Obtener registros paginados
+      const registros = await this.prisma.historialStock.findMany({
+        where,
+        orderBy: { fechaCambio: 'desc' },
+        skip,
+        take,
+        select,
+      });
+
+      // 2) Contar total de items
+      const totalItems = await this.prisma.historialStock.count({ where });
+
+      // 3) Retornar datos paginados
+      return {
+        data: registros,
+        page,
+        pageSize,
+        totalItems,
+        totalPages: Math.ceil(totalItems / pageSize),
+      };
+    } catch (error) {
+      this.logger.error('Error al obtener entregas de stock:', error);
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(
+        'Error inesperado al cargar historial de entregas de stock',
+      );
+    }
+  }
+
   //ELIMINAR TODOS
   async deleteAll() {
     try {

@@ -1,32 +1,14 @@
-import {
-  IsInt,
-  IsOptional,
-  IsNumber,
-  IsDateString,
-  IsEnum,
-  IsString,
-} from 'class-validator';
+import { IsInt, IsOptional, IsString } from 'class-validator';
 
-export class OpenRegistDTO {
+export class IniciarCaja {
   @IsInt()
   sucursalId: number;
-
-  @IsString()
-  @IsOptional()
-  comentario?: string;
-
-  @IsOptional()
   @IsInt()
-  usuarioId?: number;
+  usuarioInicioId: number;
 
-  @IsNumber()
+  @IsInt()
   saldoInicial: number;
-
   @IsOptional()
-  @IsDateString()
-  fechaInicio?: string;
-
-  @IsOptional()
-  @IsEnum(['ABIERTO', 'CERRADO'])
-  estado?: string;
+  @IsString()
+  comentario?: string;
 }

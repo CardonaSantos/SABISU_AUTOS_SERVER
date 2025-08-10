@@ -630,20 +630,20 @@ export class CuotasService {
 
       console.log('Incrementando saldo');
 
-      const saldos = await this.prisma.sucursalSaldo.update({
-        where: {
-          sucursalId: createVentaCuotaDto.sucursalId,
-        },
-        data: {
-          saldoAcumulado: {
-            increment: createVentaCuotaDto.totalVenta,
-          },
-          totalIngresos: {
-            increment: createVentaCuotaDto.totalVenta,
-          },
-        },
-      });
-      console.log('Incrementando saldo', saldos);
+      // const saldos = await this.prisma.sucursalSaldo.update({
+      //   where: {
+      //     sucursalId: createVentaCuotaDto.sucursalId,
+      //   },
+      //   data: {
+      //     saldoAcumulado: {
+      //       increment: createVentaCuotaDto.totalVenta,
+      //     },
+      //     totalIngresos: {
+      //       increment: createVentaCuotaDto.totalVenta,
+      //     },
+      //   },
+      // });
+      // console.log('Incrementando saldo', saldos);
 
       return ventaCuota;
     } catch (error) {
@@ -1447,23 +1447,23 @@ export class CuotasService {
       console.log('El total de todas las cuotas es:', total);
 
       // Actualizar el saldo de la sucursal
-      const x = await this.prisma.sucursalSaldo.findUnique({
-        where: { sucursalId: sucursal.id },
-      });
-      console.log('El saldo actual es: ', x);
+      // const x = await this.prisma.sucursalSaldo.findUnique({
+      //   where: { sucursalId: sucursal.id },
+      // });
+      // console.log('El saldo actual es: ', x);
 
-      await this.prisma.sucursalSaldo.update({
-        where: { sucursalId: sucursal.id },
-        data: {
-          saldoAcumulado: { decrement: total },
-          totalEgresos: { increment: total },
-        },
-      });
+      // await this.prisma.sucursalSaldo.update({
+      //   where: { sucursalId: sucursal.id },
+      //   data: {
+      //     saldoAcumulado: { decrement: total },
+      //     totalEgresos: { increment: total },
+      //   },
+      // });
 
-      const l = await this.prisma.sucursalSaldo.findUnique({
-        where: { sucursalId: sucursal.id },
-      });
-      console.log('El saldo actual es: ', l);
+      // const l = await this.prisma.sucursalSaldo.findUnique({
+      //   where: { sucursalId: sucursal.id },
+      // });
+      // console.log('El saldo actual es: ', l);
 
       await this.prisma.cuota.deleteMany({
         where: { ventaCuotaId: creditId },
@@ -1596,26 +1596,26 @@ export class CuotasService {
         },
       });
 
-      let x = await prisma.sucursalSaldo.findUnique({
-        where: {
-          sucursalId: ventaCuota.sucursalId,
-        },
-      });
+      // let x = await prisma.sucursalSaldo.findUnique({
+      //   where: {
+      //     sucursalId: ventaCuota.sucursalId,
+      //   },
+      // });
 
-      console.log('el monto actual de la sucursal es: ', x);
+      // console.log('el monto actual de la sucursal es: ', x);
 
-      await prisma.sucursalSaldo.updateMany({
-        where: { sucursalId: ventaCuota.sucursalId },
-        data: {
-          saldoAcumulado: { decrement: monto }, // Restar el monto pagado
-          totalIngresos: { decrement: monto },
-        },
-      });
+      // await prisma.sucursalSaldo.updateMany({
+      //   where: { sucursalId: ventaCuota.sucursalId },
+      //   data: {
+      //     saldoAcumulado: { decrement: monto }, // Restar el monto pagado
+      //     totalIngresos: { decrement: monto },
+      //   },
+      // });
 
-      console.log(
-        'El saldo de la sucursal debería ser: ',
-        x.saldoAcumulado - monto,
-      );
+      // console.log(
+      //   'El saldo de la sucursal debería ser: ',
+      //   x.saldoAcumulado - monto,
+      // );
 
       return {
         message:

@@ -124,13 +124,13 @@ export class SaleDeletedService {
       }
       await tx.venta.delete({ where: { id: ventaId } });
 
-      await tx.sucursalSaldo.update({
-        where: { sucursalId },
-        data: {
-          saldoAcumulado: { decrement: totalVenta },
-          totalIngresos: { decrement: totalVenta },
-        },
-      });
+      // await tx.sucursalSaldo.update({
+      //   where: { sucursalId },
+      //   data: {
+      //     saldoAcumulado: { decrement: totalVenta },
+      //     totalIngresos: { decrement: totalVenta },
+      //   },
+      // });
 
       await this.tracker.trackerEliminacionVenta(
         tx,

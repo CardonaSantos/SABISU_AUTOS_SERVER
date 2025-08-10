@@ -10,10 +10,21 @@ import {
 
 export class CreateWarrantyDto {
   @IsInt()
+  ventaProductoID?: number;
+
+  @IsInt()
+  sucursalId: number;
+
+  @IsInt()
   clienteId: number;
+  @IsInt()
+  ventaId: number;
 
   @IsInt()
   productoId: number;
+
+  @IsInt()
+  cantidadDevuelta: number;
 
   @IsInt()
   usuarioIdRecibe: number;
