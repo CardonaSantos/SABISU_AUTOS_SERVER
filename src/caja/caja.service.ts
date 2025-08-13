@@ -4,9 +4,16 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { EstadoTurnoCaja, Prisma, TipoMovimientoCaja } from '@prisma/client';
+import {
+  EstadoTurnoCaja,
+  MetodoPago,
+  Prisma,
+  RegistroCaja,
+  TipoMovimientoCaja,
+} from '@prisma/client';
 import { IniciarCaja } from './dto/open-regist.dto';
 import { CerrarCaja } from './dto/cerrar-caja.dto';
 import { CajaAbierta } from './dataTrsansfer/interfaces';
@@ -16,15 +23,25 @@ import * as utc from 'dayjs/plugin/utc';
 import * as timezone from 'dayjs/plugin/timezone';
 import * as isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
 import * as isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
+import { VentaLigadaACajaDTO } from './dto/new-dto';
+import { TZGT } from 'src/utils/utils';
+import { UtilidadesService } from './utilidades/utilidades.service';
+import { DepositoCierreDto } from 'src/movimiento-caja/dto/deposito-cierre-caja';
 dayjs.extend(utc);
 dayjs.extend(timezone);
 dayjs.extend(isSameOrBefore);
 dayjs.extend(isSameOrAfter);
 dayjs.locale('es');
+
 @Injectable()
 export class CajaService {
   private logger = new Logger(CajaService.name);
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly utilidades: UtilidadesService,
+  ) {
+    console.log('CajaService prisma inyectado?', !!this.prisma);
+  }
 
   /**
    *
@@ -69,94 +86,109 @@ export class CajaService {
   }
 
   /**
-   *
+   * Para cerrar una caja manualmente sin depositar, solo cerrar turno en caja
    * @param dto datos para cerrar la caja, monto final, ids de ventas y movimientos como egresos y depositos, que son movimientos de cajas
    * @returns
    */
-  async cerrarCaja(dto: {
-    cajaID: number;
-    usuarioCierra: number;
-    comentarioFinal?: string;
-  }) {
+  async cerrarCaja(
+    dto: {
+      cajaID: number;
+      usuarioCierra: number;
+      comentarioFinal?: string;
+    },
+    cierreCaja: boolean = false,
+    valorAjustado: number = 0,
+  ) {
     const { cajaID, usuarioCierra, comentarioFinal } = dto;
 
     return this.prisma.$transaction(async (tx) => {
-      await tx.$executeRawUnsafe(
+      await tx.$queryRawUnsafe(
         `SELECT id FROM "RegistroCaja" WHERE id = ${cajaID} FOR UPDATE`,
       );
 
       const caja = await tx.registroCaja.findUnique({
         where: { id: cajaID },
-        select: { id: true, estado: true, saldoInicial: true },
+        select: {
+          id: true,
+          estado: true,
+          saldoInicial: true,
+          sucursalId: true,
+        },
       });
       if (!caja) throw new BadRequestException('Caja no existe');
       if (caja.estado !== 'ABIERTO')
         throw new BadRequestException('La caja no está abierta');
 
-      const movimientos = await tx.movimientoCaja.findMany({
-        where: { registroCajaId: cajaID },
-        select: { tipo: true, monto: true },
-      });
+      const tot = await this.utilidades.calcularTotalesTurno(tx, cajaID);
+      const saldoFinal = caja.saldoInicial + tot.neto;
 
-      let ingresos = 0,
-        egresos = 0,
-        ventas = 0,
-        depositos = 0;
-      for (const m of movimientos) {
-        if (m.tipo === 'VENTA') {
-          ventas += m.monto;
-          ingresos += m.monto;
-        } else if (['INGRESO', 'ABONO', 'TRANSFERENCIA'].includes(m.tipo))
-          ingresos += m.monto;
-        else if (
-          ['EGRESO', 'DEPOSITO_BANCO', 'RETIRO', 'CHEQUE'].includes(m.tipo)
-        ) {
-          egresos += m.monto;
-          if (m.tipo === 'DEPOSITO_BANCO') depositos += m.monto;
-        }
-      }
-      const saldoFinal = caja.saldoInicial + ingresos - egresos;
-
-      return tx.registroCaja.update({
+      const cerrada = await tx.registroCaja.update({
         where: { id: cajaID },
         data: {
           estado: 'CERRADO',
-          fechaCierre: new Date(),
+          fechaCierre: dayjs().tz(TZGT).toDate(),
           usuarioCierre: { connect: { id: usuarioCierra } },
           saldoFinal,
-          comentarioFinal,
-          // movimientoCaja: JSON.stringify({ ingresos, egresos, ventas, depositos }),
+          comentarioFinal: comentarioFinal ?? null,
+          depositado: false, // no hubo depósito de cierre
         },
       });
+
+      await this.utilidades.upsertSaldoDiarioTx(
+        tx,
+        caja.sucursalId,
+        cerrada,
+        tot,
+      );
+
+      if (cierreCaja) {
+        this.logger.debug(
+          'Aqui poner los flags de que la caja ha cerrado, y opcionalmente si nos pasaron una cantidad custom, poner el estado idoneo',
+        );
+
+        if (valorAjustado > 0) {
+          this.logger.log(
+            'Ajustar el saldo final de la caja, porque nos mandaron otro, o acortaron el monto',
+          );
+        }
+      }
+
+      return cerrada;
     });
   }
+
   /**
    *
    * @param sucursalId ID de la sucursal para conseguir el ultimo registro de sucursalSaldoDiario, retorna el monto final
    * @returns
    */
   async getSaldoInicial(sucursalId: number): Promise<number> {
-    const turnoPrevio = await this.prisma.registroCaja.findFirst({
-      where: {
-        sucursalId,
-        estado: 'CERRADO',
-        depositado: false,
-      },
-      orderBy: { fechaCierre: 'desc' },
+    // (opcional) si ya hay caja abierta, no abras otra
+    const abierta = await this.prisma.registroCaja.findFirst({
+      where: { sucursalId, estado: 'ABIERTO', fechaCierre: null },
+      select: { saldoInicial: true, id: true },
     });
-    if (turnoPrevio?.saldoFinal != null) {
-      return turnoPrevio.saldoFinal;
+    if (abierta) return abierta.saldoInicial; // o lanza error, según tu regla
+
+    // Última caja cerrada de la sucursal (sin filtrar por depositado)
+    const ultima = await this.prisma.registroCaja.findFirst({
+      where: { sucursalId, estado: 'CERRADO' },
+      orderBy: { fechaCierre: 'desc' },
+      select: { saldoFinal: true, depositado: true },
+    });
+
+    if (!ultima) {
+      // Fallback (opcional): toma el último snapshot diario si existe
+      const cierreDia = await this.prisma.sucursalSaldoDiario.findFirst({
+        where: { sucursalId },
+        orderBy: { fechaGenerado: 'desc' },
+        select: { saldoFinal: true },
+      });
+      return cierreDia?.saldoFinal ?? 0;
     }
 
-    // Fallback: float oficial del día anterior
-    const ayer = dayjs().subtract(1, 'day').startOf('day').toDate();
-    const cierreDia = await this.prisma.sucursalSaldoDiario.findFirst({
-      where: {
-        sucursalId,
-        fechaGenerado: ayer, // gracias al date-only, ya pega exacto
-      },
-    });
-    return cierreDia?.saldoFinal ?? 0;
+    // Regla central:
+    return ultima.depositado ? 0 : (ultima.saldoFinal ?? 0);
   }
 
   /**
@@ -315,5 +347,229 @@ export class CajaService {
       this.logger.error('Error cerrando caja:', err);
       throw new InternalServerErrorException('Error inesperado al cerrar caja');
     }
+  }
+
+  /**
+   * Liga una venta al turno de caja abierto de su sucursal.
+   * - Requiere caja abierta si la venta tiene pagos en EFECTIVO (configurable).
+   * - Idempotente: si ya está ligada, no falla.
+   */
+
+  // Wrapper opcional: si alguien llama sin tx, abrimos una.
+  async linkVentaToCaja(
+    ventaID: number,
+    sucursalID?: number,
+    opts?: { exigirCajaSiEfectivo?: boolean },
+  ) {
+    return this.prisma.$transaction((tx) =>
+      this.linkVentaToCajaTx(tx, ventaID, sucursalID, opts),
+    );
+  }
+
+  async linkVentaToCajaTx(
+    tx: Prisma.TransactionClient,
+    ventaID: number,
+    sucursalID?: number,
+    opts?: { exigirCajaSiEfectivo?: boolean },
+  ) {
+    console.log('El id venta es: ', ventaID);
+
+    const { exigirCajaSiEfectivo = true } = opts ?? {};
+    await tx.$executeRaw`SET LOCAL lock_timeout = '3s'`;
+
+    const venta = await tx.venta.findUnique({
+      where: { id: ventaID },
+      select: {
+        id: true,
+        totalVenta: true,
+        registroCajaId: true,
+        sucursalId: true,
+        metodoPago: { select: { metodoPago: true } },
+      },
+    });
+    if (!venta) throw new NotFoundException({ message: 'Venta no encontrada' });
+    if (venta.registroCajaId) return venta;
+
+    const sucursal = sucursalID ?? venta.sucursalId;
+    if (!sucursal)
+      throw new BadRequestException({ message: 'Venta sin sucursal asociada' });
+
+    const requiereCaja =
+      venta.metodoPago?.metodoPago === MetodoPago.CONTADO &&
+      venta.totalVenta > 0;
+
+    console.log('requiere caja? ', requiereCaja);
+
+    const cajaAbierta = await tx.registroCaja.findFirst({
+      where: { sucursalId: sucursal, estado: 'ABIERTO', fechaCierre: null },
+      orderBy: { fechaApertura: 'desc' },
+      select: { id: true },
+    });
+
+    console.log('La caja abierta es: ', cajaAbierta);
+
+    if (!cajaAbierta) {
+      if (requiereCaja && exigirCajaSiEfectivo) {
+        throw new BadRequestException({
+          message: 'No hay caja abierta para venta en efectivo.',
+        });
+      }
+      return venta; // tarjeta/transferencia/crédito sin caja
+    }
+
+    // lock + re-chequeo
+    const locked = await tx.$queryRaw<
+      Array<{ estado: string; fechaCierre: Date | null }>
+    >`
+      SELECT estado, "fechaCierre" FROM "RegistroCaja"
+      WHERE id = ${cajaAbierta.id}
+      FOR UPDATE NOWAIT
+    `;
+    const stillOpen =
+      locked.length === 1 &&
+      locked[0].estado === 'ABIERTO' &&
+      locked[0].fechaCierre === null;
+    if (!stillOpen) {
+      if (requiereCaja && exigirCajaSiEfectivo) {
+        throw new BadRequestException({
+          message: 'La caja se cerró durante el proceso.',
+        });
+      }
+      return venta;
+    }
+
+    const ventaUdated = await tx.venta.updateMany({
+      where: { id: ventaID, registroCajaId: null },
+      data: { registroCajaId: cajaAbierta.id },
+    });
+    this.logger.log('La venta actualizada es: ', ventaUdated);
+
+    return tx.venta.findUnique({
+      where: { id: ventaID },
+      select: { id: true, registroCajaId: true, sucursalId: true },
+    });
+  }
+
+  /**
+   *
+   * @param cajaID ID DE LA CAJA
+   * @returns ventas de la caja
+   */
+  // DTOs para la UI
+  async getVentasLigadasACaja(
+    cajaID: number,
+    opts?: { page?: number; pageSize?: number; order?: 'asc' | 'desc' },
+  ): Promise<VentaLigadaACajaDTO[]> {
+    try {
+      if (!Number.isInteger(cajaID) || cajaID <= 0) {
+        throw new BadRequestException('ID no proporcionado o inválido');
+      }
+
+      const page = opts?.page ?? 1;
+      const pageSize = opts?.pageSize ?? 50;
+      const order = opts?.order ?? 'desc';
+
+      const ventas = await this.prisma.venta.findMany({
+        where: {
+          registroCajaId: cajaID,
+          metodoPago: {
+            metodoPago: 'CONTADO',
+          },
+        },
+        orderBy: { horaVenta: order },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        select: {
+          id: true,
+          horaVenta: true,
+          totalVenta: true,
+          tipoComprobante: true,
+          referenciaPago: true,
+          metodoPago: { select: { metodoPago: true } }, // puede ser null si la FK es opcional
+          productos: {
+            select: {
+              id: true,
+              cantidad: true,
+              estado: true,
+              precioVenta: true,
+              producto: {
+                select: { id: true, nombre: true, codigoProducto: true },
+              },
+            },
+          },
+          cliente: { select: { id: true, nombre: true } }, // null si no tiene cliente
+        },
+      });
+
+      const formattedData: VentaLigadaACajaDTO[] = ventas.map((v) => ({
+        id: v.id,
+        cliente: v.cliente
+          ? { id: v.cliente.id, nombre: v.cliente.nombre }
+          : null,
+        totalVenta: v.totalVenta,
+        tipoComprobante: v.tipoComprobante,
+        referenciaPago: v.referenciaPago,
+        metodoPago: v.metodoPago ?? null,
+        horaVenta: v.horaVenta,
+        productos: v.productos.map((p) => ({
+          lineaId: p.id,
+          precioVenta: p.precioVenta,
+          estado: p.estado,
+          cantidad: p.cantidad,
+          productoId: p.producto.id,
+          nombre: p.producto.nombre,
+          codigoProducto: p.producto.codigoProducto,
+        })),
+      }));
+
+      return formattedData;
+    } catch (error) {
+      this.logger.error('getVentasLigadasACaja error:', error);
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException({ message: 'Error inesperado' });
+    }
+  }
+
+  /**
+   *
+   * @param
+   * @returns data real sobre los totales del turno de la caja
+   */
+  async previewCierre({
+    sucursalId,
+    usuarioId,
+  }: {
+    sucursalId: number;
+    usuarioId: number;
+  }) {
+    const caja = await this.prisma.registroCaja.findFirst({
+      where: {
+        sucursalId,
+        usuarioInicioId: usuarioId,
+        estado: 'ABIERTO',
+        fechaCierre: null,
+      },
+      orderBy: { fechaApertura: 'desc' },
+      select: { id: true, saldoInicial: true },
+    });
+    if (!caja) throw new BadRequestException('No hay caja abierta');
+
+    const tot = await this.utilidades.calcularTotalesTurno(
+      this.prisma,
+      caja.id,
+    );
+    const efectivoDisponible = caja.saldoInicial + tot.ingresos - tot.egresos;
+
+    return {
+      cajaId: caja.id,
+      saldoInicial: caja.saldoInicial,
+      ...tot, // ingresos, egresos, depositos, ventasEfectivo, neto
+      efectivoDisponible,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  async deleteAllCajas() {
+    return this.prisma.registroCaja.deleteMany({});
   }
 }

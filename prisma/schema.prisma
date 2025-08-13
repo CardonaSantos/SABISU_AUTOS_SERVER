@@ -234,15 +234,12 @@ model SucursalSaldoDiario {
     globalDiarioId Int?
     globalDiario   SaldoGlobalDiario? @relation("GlobalSaldos", fields: [globalDiarioId], references: [id], onDelete: SetNull)
     @@unique([sucursalId, fecha])
-
     creadoEn        DateTime @default(now())
     actualizadoEn   DateTime @updatedAt
-    //nueva prop de prueba, solo fecha y media noche forzado 
     fechaGenerado        DateTime  @default(dbgenerated("(CURRENT_DATE)"))  // sólo la fecha, sin hora
   }
 
-
-model SaldoGlobalDiario {
+  model SaldoGlobalDiario {
     id             Int       @id @default(autoincrement())
     fecha          DateTime  @default(now()) @unique
     saldoTotal     Float     // Suma de todos los saldoFinal
@@ -270,7 +267,7 @@ model SaldoGlobalDiario {
     estado           EstadoTurnoCaja @default(ABIERTO) 
     comentario       String?
     comentarioFinal  String?
-    movimientoCaja   String?
+    movimientoCaja   Int?
     movimientos      MovimientoCaja[]
     venta Venta[]
     creadoEn        DateTime @default(now())
@@ -284,7 +281,7 @@ model SaldoGlobalDiario {
     registroCaja    RegistroCaja? @relation(fields:[registroCajaId], references:[id])//lo dejo opcional porque puede ser un egreso sin turno de caja
     fecha           DateTime  @default(now())
     tipo            TipoMovimientoCaja
-    categoria       CategoriaMovimiento
+    categoria       CategoriaMovimiento?
     monto           Float
     descripcion     String?
     referencia      String?
@@ -324,7 +321,6 @@ enum TipoMovimientoCaja {
   DEVOLUCION
   OTRO
 }
-
 
 enum CategoriaMovimiento {
     COSTO_VENTA

@@ -48,9 +48,31 @@ export class CajaController {
     return this.cajaService.conseguirCajaAbierta(dto);
   }
 
+  @Get('/get-previo-cierre/:sucursalID/:userID')
+  getMontoPrevio(
+    @Param('sucursalID', ParseIntPipe) sucursalID: number,
+    @Param('userID', ParseIntPipe) userID: number,
+  ) {
+    const dto = {
+      sucursalId: sucursalID,
+      usuarioId: userID,
+    };
+    return this.cajaService.previewCierre(dto);
+  }
+
   //CONSEGUIR REGISTRO DE CAJA SIN CERRAR DE MI USUSARIO EN CIERTA SUCURSAL
   @Get('/get-cajas-registros')
   getCajasRegistros() {
     return this.cajaService.getCajasRegistros();
+  }
+
+  @Get('/get-cajas-registros-ventas/:id')
+  getVentasDeCaja(@Param('id', ParseIntPipe) id: number) {
+    return this.cajaService.getVentasLigadasACaja(id);
+  }
+
+  @Delete('/delete-all')
+  deletAllCajas() {
+    return this.cajaService.deleteAllCajas();
   }
 }

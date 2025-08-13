@@ -15,6 +15,7 @@ import { TipoNotificacion } from '@prisma/client';
 import { HistorialStockTrackerService } from 'src/historial-stock-tracker/historial-stock-tracker.service';
 import { CreateRequisicionRecepcionLineaDto } from 'src/recepcion-requisiciones/dto/requisicion-recepcion-create.dto';
 import { SoloIDProductos } from 'src/recepcion-requisiciones/dto/create-venta-tracker.dto';
+import { CajaService } from 'src/caja/caja.service';
 
 @Injectable()
 export class VentaService {
@@ -25,6 +26,7 @@ export class VentaService {
     private readonly clienteService: ClientService, // Inyección del servicio Cliente
     private readonly notifications: NotificationService,
     private readonly tracker: HistorialStockTrackerService,
+    private readonly cajaService: CajaService,
   ) {}
 
   async create(createVentaDto: CreateVentaDto) {
@@ -229,6 +231,10 @@ export class VentaService {
         await tx.venta.update({
           where: { id: venta.id },
           data: { metodoPago: { connect: { id: pago.id } } },
+        });
+
+        await this.cajaService.linkVentaToCajaTx(tx, venta.id, sucursalId, {
+          exigirCajaSiEfectivo: true,
         });
 
         return venta;

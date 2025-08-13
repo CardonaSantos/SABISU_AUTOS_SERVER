@@ -37,6 +37,8 @@ export class MovimientoCajaController {
     @Body() updateMovimientoCajaDto: UpdateMovimientoCajaDto,
   ) {}
 
-  @Delete(':id')
-  remove(@Param('id') id: string) {}
+  @Delete('delete-movimiento:id')
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.movimientoCajaService.deleteMovimientoById(id);
+  }
 }
