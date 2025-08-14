@@ -19,7 +19,7 @@ import { UtilidadesService } from 'src/caja/utilidades/utilidades.service';
 import { CajaService } from 'src/caja/caja.service';
 import { TZGT } from 'src/utils/utils';
 import { DepositoCierreDto } from './dto/deposito-cierre-caja';
-import { Prisma } from '@prisma/client';
+import { EstadoTurnoCaja, Prisma } from '@prisma/client';
 dayjs.extend(utc);
 dayjs.extend(timezone);
 dayjs.extend(isSameOrBefore);
@@ -289,7 +289,6 @@ export class MovimientoCajaService {
     const { usuarioId, sucursalId, banco, numeroBoleta, depositarTodo } = dto;
 
     return this.prisma.$transaction(async (tx) => {
-      // 1) Ubicar y bloquear caja abierta del usuario/sucursal (o pasa registroCajaId directo)
       const caja = await tx.registroCaja.findFirst({
         where: {
           sucursalId,
@@ -324,7 +323,6 @@ export class MovimientoCajaService {
       if (!monto || monto <= 0)
         throw new BadRequestException('Monto de depósito inválido');
 
-      // 3) Crear el movimiento de depósito de cierre
       const mov = await tx.movimientoCaja.create({
         data: {
           tipo: 'DEPOSITO_BANCO',
@@ -338,7 +336,6 @@ export class MovimientoCajaService {
         },
       });
 
-      // 4) Recalcular y cerrar
       const tot = await this.utilidades.calcularTotalesTurno(tx, caja.id);
       const saldoFinal = caja.saldoInicial + tot.neto;
 
@@ -389,7 +386,6 @@ export class MovimientoCajaService {
       throw new BadRequestException('Error inesperado');
     }
   }
-  //CERRAR CAJA
 
   /**
    *
@@ -457,6 +453,7 @@ export class MovimientoCajaService {
         cajaID: caja.id,
         usuarioCierra: usuarioId,
         comentarioFinal: descripcion,
+        estado: dto.depositarTodo ? 'CERRADO' : 'ARQUEO',
         depositado: depositarTodo || monto === efectivoDisponible, // true si quedó en 0
       });
 
@@ -471,10 +468,17 @@ export class MovimientoCajaService {
       cajaID: number;
       usuarioCierra: number;
       comentarioFinal?: string;
+      estado?: EstadoTurnoCaja; // <-- NUEVO
       depositado?: boolean;
     },
   ) {
-    const { cajaID, usuarioCierra, comentarioFinal, depositado } = params;
+    const {
+      cajaID,
+      usuarioCierra,
+      comentarioFinal,
+      estado = 'CERRADO',
+      depositado,
+    } = params;
 
     await tx.$queryRawUnsafe(
       `SELECT id FROM "RegistroCaja" WHERE id = ${cajaID} FOR UPDATE`,
@@ -495,7 +499,7 @@ export class MovimientoCajaService {
     const cerrada = await tx.registroCaja.update({
       where: { id: cajaID },
       data: {
-        estado: 'CERRADO',
+        estado: estado,
         fechaCierre: dayjs().tz(TZGT).toDate(),
         usuarioCierre: { connect: { id: usuarioCierra } },
         saldoFinal,

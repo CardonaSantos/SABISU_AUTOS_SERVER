@@ -163,32 +163,42 @@ export class CajaService {
    * @returns
    */
   async getSaldoInicial(sucursalId: number): Promise<number> {
-    // (opcional) si ya hay caja abierta, no abras otra
+    // No abrir si ya hay caja realmente abierta
     const abierta = await this.prisma.registroCaja.findFirst({
-      where: { sucursalId, estado: 'ABIERTO', fechaCierre: null },
-      select: { saldoInicial: true, id: true },
+      where: {
+        sucursalId,
+        estado: 'ABIERTO',
+        fechaCierre: null,
+      },
+      select: { id: true },
     });
-    if (abierta) return abierta.saldoInicial; // o lanza error, según tu regla
+    if (abierta) {
+      // throw new BadRequestException('Ya existe una caja abierta en la sucursal');
+      return 0;
+    }
 
-    // Última caja cerrada de la sucursal (sin filtrar por depositado)
-    const ultima = await this.prisma.registroCaja.findFirst({
-      where: { sucursalId, estado: 'CERRADO' },
+    // Último turno terminado (cierre total o parcial)
+    const ultimaTerminada = await this.prisma.registroCaja.findFirst({
+      where: {
+        sucursalId,
+        estado: { in: ['CERRADO', 'ARQUEO'] },
+      },
       orderBy: { fechaCierre: 'desc' },
       select: { saldoFinal: true, depositado: true },
     });
 
-    if (!ultima) {
-      // Fallback (opcional): toma el último snapshot diario si existe
-      const cierreDia = await this.prisma.sucursalSaldoDiario.findFirst({
-        where: { sucursalId },
-        orderBy: { fechaGenerado: 'desc' },
-        select: { saldoFinal: true },
-      });
-      return cierreDia?.saldoFinal ?? 0;
+    if (ultimaTerminada) {
+      // Si depositó todo -> empieza en 0; si no -> arrastra saldoFinal
+      return ultimaTerminada.depositado ? 0 : (ultimaTerminada.saldoFinal ?? 0);
     }
 
-    // Regla central:
-    return ultima.depositado ? 0 : (ultima.saldoFinal ?? 0);
+    // Fallback: usa el snapshot diario más reciente (si aplica)
+    const snap = await this.prisma.sucursalSaldoDiario.findFirst({
+      where: { sucursalId },
+      orderBy: { fechaGenerado: 'desc' },
+      select: { saldoFinal: true },
+    });
+    return snap?.saldoFinal ?? 0;
   }
 
   /**

@@ -51,6 +51,7 @@ import { UtilitiesModule } from './utilities/utilities.module';
 import { HistorialStockModule } from './historial-stock/historial-stock.module';
 import { PedidosModule } from './pedidos/pedidos.module';
 import { MovimientoCajaModule } from './movimiento-caja/movimiento-caja.module';
+import { CajaRegistrosModule } from './caja-registros/caja-registros.module';
 
 @Module({
   imports: [
@@ -105,6 +106,7 @@ import { MovimientoCajaModule } from './movimiento-caja/movimiento-caja.module';
     HistorialStockModule,
     PedidosModule,
     MovimientoCajaModule,
+    CajaRegistrosModule,
   ],
   controllers: [AppController],
   providers: [AppService, CloudinaryProvider],
