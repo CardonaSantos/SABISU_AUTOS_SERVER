@@ -13,21 +13,27 @@ import { CajaRegistrosService } from './caja-registros.service';
 import { CreateCajaRegistroDto } from './dto/create-caja-registro.dto';
 import { UpdateCajaRegistroDto } from './dto/update-caja-registro.dto';
 import { PageOptionsDto } from './dto/page-options';
+import { CajaRegistrosQueryDto } from './dto/dto-caja-request';
 
 @Controller('caja-registros')
 export class CajaRegistrosController {
   constructor(private readonly cajaRegistrosService: CajaRegistrosService) {}
 
-  @Post()
-  create(@Body() createCajaRegistroDto: CreateCajaRegistroDto) {
-    return this.cajaRegistrosService.create(createCajaRegistroDto);
-  }
-
+  /**
+   *
+   * @param pageOptionsDTO limit, page para paginacion (sin sucusalID)
+   * @returns registros de cajas de todas las sucursales
+   */
   @Get('')
-  findAllCajas(@Query() pageOptionsDTO: PageOptionsDto) {
+  findAllCajas(@Query() pageOptionsDTO: CajaRegistrosQueryDto) {
     return this.cajaRegistrosService.getRegistrosCajas(pageOptionsDTO);
   }
 
+  /**
+   *
+   * @param id ID de la caja a ver completa
+   * @returns la caja con todos sus detalles
+   */
   @Get('caja/:id')
   getCaja(@Param('id', ParseIntPipe) id: number) {
     return this.cajaRegistrosService.getRegistroCajaById(id);
@@ -35,7 +41,7 @@ export class CajaRegistrosController {
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.cajaRegistrosService.findOne(+id);
+    // return this.cajaRegistrosService.findOne(+id);
   }
 
   @Patch(':id')
@@ -43,11 +49,11 @@ export class CajaRegistrosController {
     @Param('id') id: string,
     @Body() updateCajaRegistroDto: UpdateCajaRegistroDto,
   ) {
-    return this.cajaRegistrosService.update(+id, updateCajaRegistroDto);
+    // return this.cajaRegistrosService.update(+id, updateCajaRegistroDto);
   }
 
   @Delete(':id')
   remove(@Param('id') id: string) {
-    return this.cajaRegistrosService.remove(+id);
+    // return this.cajaRegistrosService.remove(+id);
   }
 }

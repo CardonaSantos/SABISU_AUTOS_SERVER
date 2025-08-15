@@ -8,34 +8,128 @@ import {
 import { CreateCajaRegistroDto } from './dto/create-caja-registro.dto';
 import { UpdateCajaRegistroDto } from './dto/update-caja-registro.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { PageOptionsDto } from './dto/page-options';
 import { TimeoutError } from 'rxjs';
+import { Prisma } from '@prisma/client';
+import { PageOptionsDto } from 'src/utils/page-options';
+import { CajaRegistrosQueryDto } from './dto/dto-caja-request';
 
 @Injectable()
 export class CajaRegistrosService {
   private logger = new Logger(CajaRegistrosService.name);
   constructor(private readonly prisma: PrismaService) {}
-  create(createCajaRegistroDto: CreateCajaRegistroDto) {
-    return 'This action adds a new cajaRegistro';
-  }
 
-  async getRegistrosCajas(
-    pageOptionsDTO: PageOptionsDto & { groupBySucursal?: boolean },
-  ) {
-    console.log('Las options son: ', pageOptionsDTO);
-
+  /**
+   *
+   * @param pageOptionsDTO Props para limites y paginacion
+   * @returns registros de cajas
+   */
+  async getRegistrosCajas(pageOptions: CajaRegistrosQueryDto) {
     try {
-      const page = Number(pageOptionsDTO.page ?? 1);
-      const limit = Number(pageOptionsDTO.limit ?? 10);
+      const page = Number(pageOptions.page ?? 1);
+      const limit = Number(pageOptions.limit ?? 10);
       const skip = (page - 1) * limit;
 
-      const where = pageOptionsDTO.sucursalId
-        ? { sucursalId: Number(pageOptionsDTO.sucursalId) }
-        : undefined;
+      const {
+        sucursalId,
+        estado,
+        depositado,
+        fechaAperturaInicio,
+        fechaAperturaFin,
+        fechaCierreInicio,
+        fechaCierreFin,
+
+        // filtros de movimientos
+        tipo,
+        categoria,
+        fechaMovInicio,
+        fechaMovFin,
+        search,
+      } = pageOptions;
+
+      // ---- WHERE para movimientos (se usa dentro del where principal y también en el select de movimientos)
+      const movWhere: Prisma.MovimientoCajaWhereInput = {
+        ...(tipo
+          ? Array.isArray(tipo)
+            ? { tipo: { in: tipo as any[] } }
+            : { tipo: tipo as any }
+          : {}),
+        ...(categoria
+          ? Array.isArray(categoria)
+            ? { categoria: { in: categoria as any[] } }
+            : { categoria: categoria as any }
+          : {}),
+        ...(fechaMovInicio || fechaMovFin
+          ? {
+              fecha: {
+                ...(fechaMovInicio ? { gte: new Date(fechaMovInicio) } : {}),
+                ...(fechaMovFin ? { lte: new Date(fechaMovFin) } : {}),
+              },
+            }
+          : {}),
+        ...(search
+          ? {
+              OR: [
+                { descripcion: { contains: search, mode: 'insensitive' } },
+                { numeroBoleta: { contains: search, mode: 'insensitive' } },
+                { referencia: { contains: search, mode: 'insensitive' } },
+                { banco: { contains: search, mode: 'insensitive' } },
+              ],
+            }
+          : {}),
+      };
+
+      // ¿Hay filtros efectivos de movimiento?
+      const hasMovFilters =
+        !!tipo || !!categoria || !!fechaMovInicio || !!fechaMovFin || !!search;
+
+      // ---- WHERE principal de RegistroCaja (usa nested filters sobre movimientos cuando aplica)
+      const where: Prisma.RegistroCajaWhereInput = {
+        ...(sucursalId ? { sucursalId: Number(sucursalId) } : {}),
+        ...(estado ? { estado } : {}),
+        ...(typeof depositado === 'boolean' ? { depositado } : {}),
+        ...(fechaAperturaInicio || fechaAperturaFin
+          ? {
+              fechaApertura: {
+                ...(fechaAperturaInicio
+                  ? { gte: new Date(fechaAperturaInicio) }
+                  : {}),
+                ...(fechaAperturaFin
+                  ? { lte: new Date(fechaAperturaFin) }
+                  : {}),
+              },
+            }
+          : {}),
+        ...(fechaCierreInicio || fechaCierreFin
+          ? {
+              fechaCierre: {
+                ...(fechaCierreInicio
+                  ? { gte: new Date(fechaCierreInicio) }
+                  : {}),
+                ...(fechaCierreFin ? { lte: new Date(fechaCierreFin) } : {}),
+              },
+            }
+          : {}),
+        ...(search
+          ? {
+              OR: [
+                { comentario: { contains: search, mode: 'insensitive' } },
+                { comentarioFinal: { contains: search, mode: 'insensitive' } },
+                // también deja buscar por fields de movimientos
+                { movimientos: { some: movWhere } },
+              ],
+            }
+          : {}),
+        ...(hasMovFilters
+          ? {
+              movimientos: { some: movWhere },
+            }
+          : {}),
+      };
 
       const [total, cajas] = await this.prisma.$transaction([
-        this.prisma.registroCaja.count(),
+        this.prisma.registroCaja.count({ where }),
         this.prisma.registroCaja.findMany({
+          where,
           take: limit,
           skip,
           orderBy: { fechaApertura: 'desc' },
@@ -54,6 +148,7 @@ export class CajaRegistrosService {
             saldoFinal: true,
 
             movimientos: {
+              ...(hasMovFilters ? { where: movWhere } : {}),
               orderBy: { creadoEn: 'desc' },
               select: {
                 id: true,
@@ -159,7 +254,7 @@ export class CajaRegistrosService {
               nombre: caja.usuarioCierre.nombre,
               correo: caja.usuarioCierre.correo,
             }
-          : null, // <-- evita crash cuando la caja sigue abierta
+          : null,
 
         sucursal: {
           id: caja.sucursal.id,
@@ -178,7 +273,7 @@ export class CajaRegistrosService {
           numeroBoleta: m.numeroBoleta ?? null,
           referencia: m.referencia ?? null,
           tipo: m.tipo,
-          usadoParaCierre: m.usadoParaCierre,
+          usadoParaCierre: m.usadoParaCierre ?? false,
           proveedor: m.proveedor
             ? { id: m.proveedor.id, nombre: m.proveedor.nombre }
             : null,
@@ -196,23 +291,23 @@ export class CajaRegistrosService {
           id: v.id,
           totalVenta: v.totalVenta,
           tipoComprobante: v.tipoComprobante ?? null,
-          metodoPago: v.metodoPago?.metodoPago ?? null, // <- opcional seguro
+          metodoPago: v.metodoPago?.metodoPago ?? null,
           fechaVenta: v.fechaVenta,
-          referenciaPago: v.referenciaPago ?? 'N/A', // <- tu comportamiento deseado
+          referenciaPago: v.referenciaPago ?? 'N/A',
           cliente: v.cliente
             ? { id: v.cliente.id, nombre: v.cliente.nombre }
             : 'CF',
-          productos: v.productos.map((v) => ({
-            id: v.id,
-            cantidad: v.cantidad,
-            precioVenta: v.precioVenta,
-            estado: v.estado,
+          productos: v.productos.map((p) => ({
+            id: p.id,
+            cantidad: p.cantidad,
+            precioVenta: p.precioVenta,
+            estado: p.estado,
             producto: {
-              id: v.producto.id,
-              nombre: v.producto.nombre,
-              descripcion: v.producto.descripcion,
-              codigoProducto: v.producto.codigoProducto,
-              imagenesProducto: v.producto.imagenesProducto.map(
+              id: p.producto.id,
+              nombre: p.producto.nombre,
+              descripcion: p.producto.descripcion,
+              codigoProducto: p.producto.codigoProducto,
+              imagenesProducto: p.producto.imagenesProducto.map(
                 (img, index) => ({
                   id: index,
                   public_id: img.public_id,
@@ -224,8 +319,7 @@ export class CajaRegistrosService {
         })),
       }));
 
-      // agrupado opcional por sucursal (si lo pides en query ?groupBySucursal=true)
-      if ((pageOptionsDTO as any).groupBySucursal) {
+      if ((pageOptions as any).groupBySucursal) {
         const agrupado = items.reduce<
           Record<
             number,
@@ -264,6 +358,11 @@ export class CajaRegistrosService {
     }
   }
 
+  /**
+   *
+   * @param id ID de caja
+   * @returns La caja con todas sus props
+   */
   async getRegistroCajaById(id: number) {
     try {
       const caja = await this.prisma.registroCaja.findUnique({
@@ -460,21 +559,5 @@ export class CajaRegistrosService {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException('Error inesperado');
     }
-  }
-
-  findAll() {
-    return `This action returns all cajaRegistros`;
-  }
-
-  findOne(id: number) {
-    return `This action returns a #${id} cajaRegistro`;
-  }
-
-  update(id: number, updateCajaRegistroDto: UpdateCajaRegistroDto) {
-    return `This action updates a #${id} cajaRegistro`;
-  }
-
-  remove(id: number) {
-    return `This action removes a #${id} cajaRegistro`;
   }
 }
