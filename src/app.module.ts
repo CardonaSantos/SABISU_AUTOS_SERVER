@@ -53,6 +53,7 @@ import { PedidosModule } from './pedidos/pedidos.module';
 import { MovimientoCajaModule } from './movimiento-caja/movimiento-caja.module';
 import { CajaRegistrosModule } from './caja-registros/caja-registros.module';
 import { MovimientosCajasModule } from './movimientos-cajas/movimientos-cajas.module';
+import { ResumenDiaModule } from './resumen-dia/resumen-dia.module';
 
 @Module({
   imports: [
@@ -109,6 +110,7 @@ import { MovimientosCajasModule } from './movimientos-cajas/movimientos-cajas.mo
     MovimientoCajaModule,
     CajaRegistrosModule,
     MovimientosCajasModule,
+    ResumenDiaModule,
   ],
   controllers: [AppController],
   providers: [AppService, CloudinaryProvider],

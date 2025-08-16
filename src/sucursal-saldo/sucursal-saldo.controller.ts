@@ -7,6 +7,7 @@ import {
   Param,
   Delete,
   ParseIntPipe,
+  Query,
 } from '@nestjs/common';
 import { SucursalSaldoService } from './sucursal-saldo.service';
 import { CreateSucursalSaldoDto } from './dto/create-sucursal-saldo.dto';
@@ -21,9 +22,17 @@ export class SucursalSaldoController {
     return this.sucursalSaldoService.create(createSucursalSaldoDto);
   }
 
-  @Get()
+  @Get('global')
   findAll() {
     return this.sucursalSaldoService.findAll();
+  }
+
+  @Get('saldos/diario')
+  async getSaldoDiario(
+    @Query('sucursalId', ParseIntPipe) sucursalId: number,
+    @Query('fecha') fechaISO?: string,
+  ) {
+    return this.sucursalSaldoService.getSaldoDiario(sucursalId, fechaISO);
   }
 
   //CONSEGUIR REGISTROS DE DEPOSITOS
@@ -38,8 +47,8 @@ export class SucursalSaldoController {
     return this.sucursalSaldoService.getAllEgresosSucursal(id);
   }
 
-  //CONSEGUIR EL SALDO DE ESTA SUCURSAL / SINO CREA EL REGISTRO
-  @Get(':id')
+  // CONSEGUIR EL SALDO DIARIO DE ESTA SUCURSAL / SINO CREA EL REGISTRO
+  @Get('diario/:id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.sucursalSaldoService.findOne(id);
   }

@@ -7,14 +7,20 @@ import {
   Param,
   Delete,
   ParseIntPipe,
+  Query,
 } from '@nestjs/common';
 import { CajaService } from './caja.service';
 import { IniciarCaja } from './dto/open-regist.dto';
 import { CerrarCaja } from './dto/cerrar-caja.dto';
+import { PrismaService } from 'src/prisma/prisma.service';
 
 @Controller('caja')
 export class CajaController {
-  constructor(private readonly cajaService: CajaService) {}
+  constructor(
+    private readonly cajaService: CajaService,
+
+    private readonly prisma: PrismaService,
+  ) {}
 
   //ABRIR EL REGISTRO DE CAJA [TURNO]
   @Post('/iniciar-caja')

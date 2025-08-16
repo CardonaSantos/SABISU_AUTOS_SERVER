@@ -50,28 +50,24 @@ export class CajaService {
    */
   async iniciarCaja(dto: IniciarCaja) {
     try {
-      const { comentario, saldoInicial, sucursalId, usuarioInicioId } = dto;
-      this.logger.log('los datos son: ', dto);
-      if ([saldoInicial, sucursalId, usuarioInicioId].some((p) => p == null)) {
+      const { comentario, sucursalId, usuarioInicioId } = dto;
+      if ([sucursalId, usuarioInicioId].some((p) => p == null)) {
         throw new BadRequestException('PROP INDEFINIDA');
       }
+
+      const saldoInicial =
+        dto.saldoInicial != null
+          ? dto.saldoInicial
+          : await this.getSaldoInicial(sucursalId);
 
       return await this.prisma.$transaction(async (tx) => {
         const newCaja = await tx.registroCaja.create({
           data: {
-            comentario: comentario,
-            saldoInicial: saldoInicial,
+            comentario: comentario ?? null,
+            saldoInicial,
             estado: 'ABIERTO',
-            sucursal: {
-              connect: {
-                id: sucursalId,
-              },
-            },
-            usuarioInicio: {
-              connect: {
-                id: usuarioInicioId,
-              },
-            },
+            sucursal: { connect: { id: sucursalId } },
+            usuarioInicio: { connect: { id: usuarioInicioId } },
           },
         });
         return newCaja;
@@ -98,6 +94,7 @@ export class CajaService {
     },
     cierreCaja: boolean = false,
     valorAjustado: number = 0,
+    opts?: { parcial?: boolean }, // ← nuevo flag semántico
   ) {
     const { cajaID, usuarioCierra, comentarioFinal } = dto;
 
@@ -121,16 +118,17 @@ export class CajaService {
 
       const tot = await this.utilidades.calcularTotalesTurno(tx, cajaID);
       const saldoFinal = caja.saldoInicial + tot.neto;
+      const estado = opts?.parcial ? 'ARQUEO' : 'CERRADO';
 
       const cerrada = await tx.registroCaja.update({
         where: { id: cajaID },
         data: {
-          estado: 'CERRADO',
+          estado,
           fechaCierre: dayjs().tz(TZGT).toDate(),
           usuarioCierre: { connect: { id: usuarioCierra } },
           saldoFinal,
-          comentarioFinal: comentarioFinal ?? null,
-          depositado: false, // no hubo depósito de cierre
+          comentarioFinal: dto.comentarioFinal ?? null,
+          depositado: false, // sin depósito de cierre
         },
       });
 
@@ -163,42 +161,33 @@ export class CajaService {
    * @returns
    */
   async getSaldoInicial(sucursalId: number): Promise<number> {
-    // No abrir si ya hay caja realmente abierta
+    // 1) No abrir si ya hay caja abierta
     const abierta = await this.prisma.registroCaja.findFirst({
-      where: {
-        sucursalId,
-        estado: 'ABIERTO',
-        fechaCierre: null,
-      },
+      where: { sucursalId, estado: 'ABIERTO', fechaCierre: null },
       select: { id: true },
     });
-    if (abierta) {
-      // throw new BadRequestException('Ya existe una caja abierta en la sucursal');
-      return 0;
-    }
+    if (abierta) return 0;
 
-    // Último turno terminado (cierre total o parcial)
-    const ultimaTerminada = await this.prisma.registroCaja.findFirst({
-      where: {
-        sucursalId,
-        estado: { in: ['CERRADO', 'ARQUEO'] },
-      },
+    // 2) Última caja terminada (CERRADO o ARQUEO)
+    const ultima = await this.prisma.registroCaja.findFirst({
+      where: { sucursalId, estado: { in: ['CERRADO', 'ARQUEO'] } },
       orderBy: { fechaCierre: 'desc' },
-      select: { saldoFinal: true, depositado: true },
+      select: { saldoFinal: true },
     });
 
-    if (ultimaTerminada) {
-      // Si depositó todo -> empieza en 0; si no -> arrastra saldoFinal
-      return ultimaTerminada.depositado ? 0 : (ultimaTerminada.saldoFinal ?? 0);
+    if (ultima) {
+      const sf = Number(ultima.saldoFinal ?? 0);
+      // tolerancia por centavos
+      return Math.abs(sf) < 0.01 ? 0 : sf;
     }
 
-    // Fallback: usa el snapshot diario más reciente (si aplica)
+    // 3) Fallback: snapshot diario más reciente
     const snap = await this.prisma.sucursalSaldoDiario.findFirst({
       where: { sucursalId },
       orderBy: { fechaGenerado: 'desc' },
       select: { saldoFinal: true },
     });
-    return snap?.saldoFinal ?? 0;
+    return Number(snap?.saldoFinal ?? 0);
   }
 
   /**
@@ -581,5 +570,82 @@ export class CajaService {
 
   async deleteAllCajas() {
     return this.prisma.registroCaja.deleteMany({});
+  }
+
+  //=============================================>
+  /**
+   * Obtiene el snapshot diario de saldo de una sucursal. Si no existe,
+   * intenta recalcular mínimos usando cierres de caja del día.
+   */
+  async getSaldoDiario(sucursalId: number, fechaISO?: string) {
+    try {
+      const fecha = fechaISO ? new Date(fechaISO) : new Date();
+
+      // normalizamos a inicio y fin del día
+      const startOfDay = new Date(
+        fecha.getFullYear(),
+        fecha.getMonth(),
+        fecha.getDate(),
+      );
+      const endOfDay = new Date(
+        fecha.getFullYear(),
+        fecha.getMonth(),
+        fecha.getDate() + 1,
+      );
+
+      // 1) Buscar snapshot guardado del día
+      const snap = await this.prisma.sucursalSaldoDiario.findFirst({
+        where: { sucursalId, fechaGenerado: startOfDay },
+        select: {
+          saldoInicio: true,
+          saldoFinal: true,
+          totalIngresos: true,
+          totalEgresos: true,
+        },
+      });
+
+      if (snap) {
+        // normalizamos por si vienen nulls desde DB
+        return {
+          saldoInicio: Number(snap.saldoInicio ?? 0),
+          saldoFinal: Number(snap.saldoFinal ?? 0),
+          totalIngresos:
+            snap.totalIngresos === null ? null : Number(snap.totalIngresos),
+          totalEgresos:
+            snap.totalEgresos === null ? null : Number(snap.totalEgresos),
+        };
+      }
+
+      // 2) Recalcular básico desde cierres de caja del día
+      const cierres = await this.prisma.registroCaja.findMany({
+        where: {
+          sucursalId,
+          fechaCierre: { gte: startOfDay, lt: endOfDay },
+        },
+        select: { saldoInicial: true, saldoFinal: true, id: true },
+        orderBy: { fechaCierre: 'asc' },
+      });
+
+      const saldoInicio = cierres.length
+        ? Number(cierres[0].saldoInicial ?? 0)
+        : 0;
+
+      const saldoFinal = cierres.length
+        ? Number(cierres[cierres.length - 1].saldoFinal ?? 0)
+        : 0;
+
+      // Si más adelante quieres sumar ingresos/egresos del día, acá es el lugar:
+      // const totalIngresos = await this.prisma.movimientoCaja.aggregate({...})
+      // const totalEgresos = await this.prisma.movimientoCaja.aggregate({...})
+      const totalIngresos: number | null = null;
+      const totalEgresos: number | null = null;
+
+      return { saldoInicio, saldoFinal, totalIngresos, totalEgresos };
+    } catch (error) {
+      console.error('[SucursalSaldoQueryService.getSaldoDiario]', error);
+      throw new InternalServerErrorException(
+        'Error al obtener el saldo diario',
+      );
+    }
   }
 }

@@ -655,6 +655,7 @@ enum RequisicionEstado {
   RECIBIDA     // confirmada la recepción parcial o total de los productos
   COMPLETADA   // todas las líneas recibidas y la requisición cerrada
   CANCELADA    // anulada por algún motivo
+  ENVIADA_COMPRAS
 }
 
 // ===========================> Tablas para modulo de requisiciones
@@ -700,10 +701,6 @@ model DetalleResumenVenta {
   cantidadVendida  Int           // unidades vendidas de este producto
   montoVenta       Float         // total facturado de este producto
 }
-
-
-
-
 
 model HistorialPrecioCosto {
   id                Int       @id @default(autoincrement())
