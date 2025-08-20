@@ -29,11 +29,7 @@ export class CajaRegistrosController {
     return this.cajaRegistrosService.getRegistrosCajas(pageOptionsDTO);
   }
 
-  /**
-   *
-   * @param id ID de la caja a ver completa
-   * @returns la caja con todos sus detalles
-   */
+  /** @returns la caja con todos sus detalles */
   @Get('caja/:id')
   getCaja(@Param('id', ParseIntPipe) id: number) {
     return this.cajaRegistrosService.getRegistroCajaById(id);

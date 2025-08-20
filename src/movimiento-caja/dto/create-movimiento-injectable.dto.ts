@@ -1,4 +1,3 @@
-import { CategoriaMovimiento, TipoMovimientoCaja } from '@prisma/client';
 import {
   IsBoolean,
   IsDateString,
@@ -18,11 +17,11 @@ export class CreateMovimientoInjectableDto {
   @IsDateString()
   fecha?: string;
 
-  @IsEnum(TipoMovimientoCaja)
-  tipo?: TipoMovimientoCaja;
+  // @IsEnum(TipoMovimientoCaja)
+  // tipo?: TipoMovimientoCaja;
 
-  @IsEnum(CategoriaMovimiento)
-  categoria?: CategoriaMovimiento;
+  // @IsEnum(CategoriaMovimiento)
+  // categoria?: CategoriaMovimiento;
 
   @IsNumber()
   monto?: number;

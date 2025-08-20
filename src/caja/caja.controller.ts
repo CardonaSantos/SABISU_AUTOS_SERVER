@@ -11,8 +11,10 @@ import {
 } from '@nestjs/common';
 import { CajaService } from './caja.service';
 import { IniciarCaja } from './dto/open-regist.dto';
-import { CerrarCaja } from './dto/cerrar-caja.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { CerrarCajaDto } from './dto/CerrarCajaDto';
+import { CerrarCajaV2Dto } from './cerrarCajaTypes';
+import { GetCajasQueryDto } from './GetCajasQueryDto ';
 
 @Controller('caja')
 export class CajaController {
@@ -28,17 +30,43 @@ export class CajaController {
     return this.cajaService.iniciarCaja(createCajaDto);
   }
 
-  //CERRAR LA CAJA
-  @Patch('/cerrar-caja')
-  create(@Body() dto: CerrarCaja) {
-    return this.cajaService.cerrarCaja(dto);
+  @Post('/cerrar-v2')
+  cerrarCajaAdvanced(@Body() dto: CerrarCajaV2Dto) {
+    return this.cajaService.cerrarCajaV2(dto);
   }
 
+  //CERRAR LA CAJA
+  @Patch('/cerrar-caja')
+  create(@Body() dto: CerrarCajaDto) {
+    return this.cajaService.cerrarCaja(dto);
+  }
   @Get('/get-ultimo-saldo-sucursal/:sucursalID')
   getUltimoSaldoSucursal(
     @Param('sucursalID', ParseIntPipe) sucursalID: number,
   ) {
-    return this.cajaService.getSaldoInicial(sucursalID);
+    return this.cajaService.getUltimoSaldoSucursal(sucursalID);
+  }
+
+  @Get('previa-cierre')
+  getPreviaCierre(
+    @Query()
+    q: {
+      registroCajaId?: string;
+      sucursalId?: string;
+      usuarioId?: string;
+    },
+  ) {
+    const registroCajaId = q.registroCajaId
+      ? Number(q.registroCajaId)
+      : undefined;
+    const sucursalId = q.sucursalId ? Number(q.sucursalId) : undefined;
+    const usuarioId = q.usuarioId ? Number(q.usuarioId) : undefined;
+
+    return this.cajaService.previewCierre({
+      registroCajaId,
+      sucursalId,
+      usuarioId,
+    });
   }
 
   //CONSEGUIR REGISTRO DE CAJA SIN CERRAR DE MI USUSARIO EN CIERTA SUCURSAL
@@ -51,7 +79,7 @@ export class CajaController {
       sucursalID: sucursalID,
       userID: userID,
     };
-    return this.cajaService.conseguirCajaAbierta(dto);
+    return this.cajaService.conseguirCajaAbierta(dto.sucursalID);
   }
 
   @Get('/get-previo-cierre/:sucursalID/:userID')
@@ -77,8 +105,18 @@ export class CajaController {
     return this.cajaService.getVentasLigadasACaja(id);
   }
 
+  @Get('/get-all-cajas')
+  getAllCajas() {
+    return this.cajaService.getAllCajas();
+  }
+
   @Delete('/delete-all')
   deletAllCajas() {
     return this.cajaService.deleteAllCajas();
+  }
+
+  @Get('list-cajas')
+  list(@Query() dto: GetCajasQueryDto) {
+    return this.cajaService.list(dto);
   }
 }

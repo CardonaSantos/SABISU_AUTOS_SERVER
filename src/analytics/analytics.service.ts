@@ -17,6 +17,39 @@ dayjs.extend(tz);
 export class AnalyticsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async getDashboardSummary(idSucursal: number) {
+    try {
+      // Hacemos todas las llamadas en paralelo para mejorar rendimiento
+      const [
+        ventasMes,
+        ventasSemana,
+        ventasDia,
+        ventasSemanalChart,
+        masVendidos,
+        ventasRecientes,
+      ] = await Promise.all([
+        this.getVentasMes(idSucursal),
+        this.getTotalVentasMontoSemana(idSucursal),
+        this.getVentasDiaII(idSucursal),
+        this.getVentasSemanalChart(idSucursal),
+        this.getProductosMasVendidos(),
+        this.getVentasRecientes(),
+      ]);
+
+      return {
+        ventasMes,
+        ventasSemana,
+        ventasDia,
+        ventasSemanalChart,
+        masVendidos,
+        ventasRecientes,
+      };
+    } catch (error) {
+      console.error('Error en getDashboardSummary:', error);
+      throw new InternalServerErrorException('No se pudo cargar el dashboard');
+    }
+  }
+
   async getTotalVentasMontoSemana(sucursalId: number) {
     try {
       const guatNow = dayjs().tz('America/Guatemala');

@@ -35,11 +35,11 @@ export class ResumenDiaController {
   getResumen(
     @Query('fecha') fecha?: string,
     @Query('sucursalId') sucursalId?: string,
-  ): Promise<ResumenDiarioResponse> {
-    return this.resumenDiaService.getResumenDiario({
-      fecha,
-      sucursalId: sucursalId ? Number(sucursalId) : undefined,
-    });
+  ) {
+    // return this.resumenDiaService.getResumenDiario({
+    //   fecha,
+    //   sucursalId: sucursalId ? Number(sucursalId) : undefined,
+    // });
   }
 
   // // Diario (lo que ya usa tu página)

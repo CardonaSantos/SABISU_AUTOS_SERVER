@@ -18,7 +18,9 @@ export class MovimientoCajaController {
 
   @Post()
   create(@Body() dto: CreateMovimientoCajaDto) {
-    return this.movimientoCajaService.registrarMovimientoCaja(dto);
+    console.log('La data del dto es: ', dto);
+
+    // return this.movimientoCajaService.registrarMovimientoCaja(dto);
   }
 
   @Get('movimientos-caja/:id')
@@ -39,6 +41,6 @@ export class MovimientoCajaController {
 
   @Delete('delete-movimiento:id')
   remove(@Param('id', ParseIntPipe) id: number) {
-    return this.movimientoCajaService.deleteMovimientoById(id);
+    // return this.movimientoCajaService.deleteMovimientoById(id);
   }
 }

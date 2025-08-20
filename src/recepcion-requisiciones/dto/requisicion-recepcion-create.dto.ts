@@ -41,6 +41,9 @@ export class CreateRequisicionRecepcionLineaDto {
 
 export class CreateRequisicionRecepcionDto {
   @IsInt()
+  compraId: number; // id de la requisición que se está recibiendo
+
+  @IsInt()
   requisicionId: number; // id de la requisición que se está recibiendo
   @IsInt()
   usuarioId: number; // id del usuario que hace la recepción

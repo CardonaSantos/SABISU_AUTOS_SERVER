@@ -38,7 +38,7 @@ import { MetasModule } from './metas/metas.module';
 // import { EmpresaModule } from './crm/empresa/empresa.module';
 import { EmpresaModule } from './CRM/empresa/empresa.module';
 import { SalesSummaryModule } from './sales-summary/sales-summary.module';
-import { PurchaseRequisitionsModule } from './purchase-requisitions/purchase-requisitions.module';
+import { PurchaseRequisitionsModule } from './compras-requisiciones/purchase-requisitions.module';
 import { MinimunStocksModule } from './minimun-stocks/minimun-stocks.module';
 import { MinimunStockAlertModule } from './minimun-stock-alert/minimun-stock-alert.module';
 import { ImagenesProductoModule } from './imagenes-producto/imagenes-producto.module';
@@ -54,6 +54,8 @@ import { MovimientoCajaModule } from './movimiento-caja/movimiento-caja.module';
 import { CajaRegistrosModule } from './caja-registros/caja-registros.module';
 import { MovimientosCajasModule } from './movimientos-cajas/movimientos-cajas.module';
 import { ResumenDiaModule } from './resumen-dia/resumen-dia.module';
+import { MovimientoFinancieroModule } from './movimiento-financiero/movimiento-financiero.module';
+import { CuentasBancariasModule } from './cuentas-bancarias/cuentas-bancarias.module';
 
 @Module({
   imports: [
@@ -111,6 +113,8 @@ import { ResumenDiaModule } from './resumen-dia/resumen-dia.module';
     CajaRegistrosModule,
     MovimientosCajasModule,
     ResumenDiaModule,
+    MovimientoFinancieroModule,
+    CuentasBancariasModule,
   ],
   controllers: [AppController],
   providers: [AppService, CloudinaryProvider],

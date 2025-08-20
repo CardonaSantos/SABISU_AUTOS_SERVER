@@ -51,6 +51,7 @@ model Sucursal {
   garantias Garantia[]
   compras Compra[]
   pedidos Pedido[]
+  movimientosFinancieros MovimientoFinanciero[]
 }
 
 model Reparacion {
@@ -222,114 +223,226 @@ model VentaEliminadaProducto {
 
 // =======================> ESTADO DE CAJA Y MOVIMIENTOS A MEJORAR : TOP
 
-model SucursalSaldoDiario {
-    id           Int      @id @default(autoincrement())
-    sucursalId   Int
-    fecha        DateTime @default(now())
-    saldoInicio  Float
-    saldoFinal   Float
-    totalIngresos Float
-    totalEgresos  Float
-    sucursal     Sucursal @relation(fields:[sucursalId], references:[id], onDelete: Cascade)
-    globalDiarioId Int?
-    globalDiario   SaldoGlobalDiario? @relation("GlobalSaldos", fields: [globalDiarioId], references: [id], onDelete: SetNull)
+  model SucursalSaldoDiario {
+    id              Int       @id @default(autoincrement())
+    sucursalId      Int
+    sucursal        Sucursal  @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+
+    // Normalizar a 00:00:00 del día
+    fecha           DateTime
+
+    // Caja (efectivo)
+    saldoInicioCaja Decimal   @db.Decimal(14,2)
+    ingresosCaja    Decimal   @db.Decimal(14,2)
+    egresosCaja     Decimal   @db.Decimal(14,2)
+    saldoFinalCaja  Decimal   @db.Decimal(14,2)
+
+    // Banco
+    saldoInicioBanco Decimal  @db.Decimal(14,2)
+    ingresosBanco     Decimal  @db.Decimal(14,2)
+    egresosBanco      Decimal  @db.Decimal(14,2)
+    saldoFinalBanco   Decimal  @db.Decimal(14,2)
+
+    globalDiarioId   Int?
+    globalDiario     SaldoGlobalDiario? @relation("GlobalSaldos", fields: [globalDiarioId], references: [id], onDelete: SetNull)
+
+    creadoEn         DateTime @default(now())
+    actualizadoEn    DateTime @updatedAt
+
     @@unique([sucursalId, fecha])
-    creadoEn        DateTime @default(now())
-    actualizadoEn   DateTime @updatedAt
-    fechaGenerado        DateTime  @default(dbgenerated("(CURRENT_DATE)"))  // sólo la fecha, sin hora
-  }
+}
 
   model SaldoGlobalDiario {
-    id             Int       @id @default(autoincrement())
-    fecha          DateTime  @default(now()) @unique
-    saldoTotal     Float     // Suma de todos los saldoFinal
-    ingresosTotal  Float     // Suma de todos los totalIngresos
-    egresosTotal   Float     // Suma de todos los totalEgresos
-    saldosDiarios SucursalSaldoDiario[] @relation("GlobalSaldos")
-    usuarioId Int?
-    usuario Usuario? @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
-    creadoEn        DateTime @default(now())
-    actualizadoEn   DateTime @updatedAt
-  }                                       
+    id               Int      @id @default(autoincrement())
+    fecha            DateTime @unique
+
+    // Sumatorias de todas las sucursales
+    saldoTotalCaja   Decimal  @db.Decimal(14,2)
+    ingresosTotalCaja Decimal @db.Decimal(14,2)
+    egresosTotalCaja  Decimal @db.Decimal(14,2)
+
+    saldoTotalBanco    Decimal @db.Decimal(14,2)
+    ingresosTotalBanco Decimal @db.Decimal(14,2)
+    egresosTotalBanco  Decimal @db.Decimal(14,2)
+
+    saldosDiarios    SucursalSaldoDiario[] @relation("GlobalSaldos")
+
+    usuarioId        Int?
+    usuario          Usuario? @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+
+    creadoEn         DateTime @default(now())
+    actualizadoEn    DateTime @updatedAt
+  }                               
 
   model RegistroCaja {
-    id               Int      @id @default(autoincrement())
+  id               Int       @id @default(autoincrement())
+  sucursalId       Int
+  sucursal         Sucursal  @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+
+  usuarioInicioId  Int
+  usuarioInicio    Usuario   @relation("UsuarioInicio", fields: [usuarioInicioId], references: [id])
+  usuarioCierreId  Int?
+  usuarioCierre    Usuario?  @relation("UsuarioCierre", fields: [usuarioCierreId], references: [id])
+
+  fechaApertura    DateTime  @default(now())
+  fechaCierre      DateTime?
+
+  // CHANGED: decimales para dinero
+  saldoInicial     Decimal   @db.Decimal(14,2)
+  saldoFinal       Decimal?  @db.Decimal(14,2)
+
+  estado           EstadoTurnoCaja @default(ABIERTO)
+  comentario       String?
+  comentarioFinal  String?
+
+  // CHANGED: relación con movimientos (ahora “financieros”)
+  movimientos      MovimientoFinanciero[]
+
+  // Opcional: “ventas” si ya las relacionas al turno
+  venta            Venta[]
+
+  // Opcional: fondo fijo proyectado (para sugerir depósito de cierre)
+  fondoFijo        Decimal   @db.Decimal(14,2) @default(0)
+
+  // (Puede ser redundante si confías en los movimientos de cierre)
+  depositado       Boolean   @default(false)
+
+  creadoEn         DateTime @default(now())
+  actualizadoEn    DateTime @updatedAt
+
+  @@index([sucursalId, estado])
+}
+
+
+  model MovimientoFinanciero {
+    id               Int       @id @default(autoincrement())
+
+    fecha            DateTime  @default(now())
     sucursalId       Int
-    sucursal         Sucursal @relation(fields: [sucursalId], references: [id])
-    usuarioInicioId  Int
-    usuarioInicio    Usuario  @relation("UsuarioInicio", fields: [usuarioInicioId], references: [id])
-    usuarioCierreId  Int?
-    usuarioCierre    Usuario? @relation("UsuarioCierre", fields: [usuarioCierreId], references: [id])
-    fechaApertura    DateTime @default(now())
-    fechaCierre      DateTime?
-    saldoInicial     Float
-    saldoFinal       Float?
-    estado           EstadoTurnoCaja @default(ABIERTO) 
-    comentario       String?
-    comentarioFinal  String?
-    movimientoCaja   Int?
-    movimientos      MovimientoCaja[]
-    venta Venta[]
-    creadoEn        DateTime @default(now())
-    actualizadoEn   DateTime @updatedAt
-    depositado       Boolean   @default(false)    // ¡nuevo!
+    sucursal         Sucursal  @relation(fields: [sucursalId], references: [id], onDelete: Cascade)
+
+    // Si impacta efectivo, DEBE pertenecer a un turno ABIERTO
+    registroCajaId   Int?
+    registroCaja     RegistroCaja? @relation(fields: [registroCajaId], references: [id])
+
+    // Clasificación y motivo (vistas Admin)
+    clasificacion    ClasificacionAdmin
+    motivo           MotivoMovimiento
+
+    // Reporte/conciliación
+    metodoPago       MetodoPago?
+
+    // IMPORTANTE: efectos explícitos (positivo o negativo)
+    deltaCaja        Decimal   @db.Decimal(14,2) @default(0)    // + entra efectivo; - sale efectivo
+    deltaBanco       Decimal   @db.Decimal(14,2) @default(0)    // + entra al banco; - sale del banco
+
+    // Opcional si deltaBanco ≠ 0
+    cuentaBancariaId Int?
+    cuentaBancaria   CuentaBancaria? @relation(fields: [cuentaBancariaId], references: [id])
+
+    // Información de negocio
+    descripcion      String?
+    referencia       String?
+    conFactura       Boolean?  // útil para compras/gastos
+
+    // Específicos de depósitos (evita ambigüedad solicitada por el cliente)
+    esDepositoCierre   Boolean  @default(false)  // si true => bucket “Depósitos (Cierre)”
+    esDepositoProveedor Boolean @default(false)  // si true => bucket “Depósitos a Proveedor”
+
+    // Proveedor y costos
+    proveedorId        Int?
+    proveedor          Proveedor? @relation(fields: [proveedorId], references: [id])
+
+    gastoOperativoTipo GastoOperativoTipo?   // si motivo = GASTO_OPERATIVO
+    costoVentaTipo     CostoVentaTipo?       // si motivo = COMPRA_MERCADERIA o COSTO_ASOCIADO
+
+    // Inventario (conectar cuando recibamos compras)
+    afectaInventario   Boolean   @default(false)
+
+    // Quién registró
+    usuarioId        Int
+    usuario          Usuario    @relation(fields: [usuarioId], references: [id])
+
+    creadoEn         DateTime   @default(now())
+    actualizadoEn    DateTime   @updatedAt
+
+    @@index([sucursalId, fecha])
+    @@index([registroCajaId])
+    @@index([clasificacion, motivo])
+    @@index([esDepositoCierre, esDepositoProveedor])
   }
 
-  model MovimientoCaja {
-    id              Int       @id @default(autoincrement())
-    registroCajaId  Int?
-    registroCaja    RegistroCaja? @relation(fields:[registroCajaId], references:[id])//lo dejo opcional porque puede ser un egreso sin turno de caja
-    fecha           DateTime  @default(now())
-    tipo            TipoMovimientoCaja
-    categoria       CategoriaMovimiento?
-    monto           Float
-    descripcion     String?
-    referencia      String?
-    // Campos extra para depósitos:
-    banco           String?           // si tipo = DEPOSITO_BANCO
-    numeroBoleta    String?
-    usadoParaCierre Boolean?          // toggle “cierre de caja”
-    // Campos extra para egresos/costos de venta:
-    proveedorId     Int?              // si categoria = COSTO_VENTA o DEPOSITO_PROVEEDOR
-    proveedor       Proveedor?        @relation(fields:[proveedorId], references:[id])
-    // Quién registró este movimiento
-    usuarioId       Int
-    usuario         Usuario           @relation(fields:[usuarioId], references:[id])
-    creadoEn        DateTime @default(now())
-    actualizadoEn   DateTime @updatedAt
+  model CuentaBancaria {
+    id          Int      @id @default(autoincrement())
+    banco       String
+    numero      String
+    alias       String?
+    activa      Boolean  @default(true)
+
+    movimientos MovimientoFinanciero[]
+
+    creadoEn    DateTime @default(now())
+    actualizadoEn DateTime @updatedAt
+
+    @@unique([banco, numero])
   }
 
-  
+
+// ¿Dónde impacta la contabilidad de resultados?
+  enum ClasificacionAdmin {
+    INGRESO           // Ventas, otros ingresos
+    COSTO_VENTA       // Mercadería + costos asociados (fletes/encomiendas)
+    GASTO_OPERATIVO   // Salarios, energía, logística, etc.
+    TRANSFERENCIA     // Movimientos entre Caja y Banco (no resultado)
+    AJUSTE            // Sobrantes/faltantes/regularizaciones
+    CONTRAVENTA       // Devoluciones / notas de crédito
+  }
+
+// Motivo real del movimiento (habla el idioma del negocio)
+  enum MotivoMovimiento {
+    VENTA
+    OTRO_INGRESO
+    GASTO_OPERATIVO
+    COMPRA_MERCADERIA
+    COSTO_ASOCIADO            // fletes, encomiendas, transporte a tienda
+    DEPOSITO_CIERRE           // “para no dejar efectivo”
+    DEPOSITO_PROVEEDOR        // depósito en ventanilla/boleta pagado con efectivo
+    PAGO_PROVEEDOR_BANCO      // pago a proveedor desde banco (sin pasar por caja)
+    AJUSTE_SOBRANTE
+    AJUSTE_FALTANTE
+    DEVOLUCION
+  }
+
+
+// Subtipos útiles (se pueden volver tablas si el cliente quiere editar)
+enum GastoOperativoTipo {
+  SALARIO
+  ENERGIA
+  LOGISTICA
+  RENTA
+  INTERNET
+  PUBLICIDAD
+  VIATICOS
+  OTROS
+}
+
+enum CostoVentaTipo {
+  MERCADERIA
+  FLETE
+  ENCOMIENDA
+  TRANSPORTE
+  OTROS
+}
+
 enum EstadoTurnoCaja {
   ABIERTO
   CERRADO
-  ARQUEO       // Corte o arqueo parcial
-  AJUSTADO     // Se hizo ajuste por diferencia
-  ANULADO      // (opcional, si anulas turnos)
+  ARQUEO
+  AJUSTADO
+  ANULADO
 }
 
-enum TipoMovimientoCaja {
-  INGRESO
-  EGRESO
-  VENTA
-  ABONO
-  RETIRO
-  DEPOSITO_BANCO
-  CHEQUE
-  TRANSFERENCIA
-  AJUSTE
-  DEVOLUCION
-  OTRO
-}
-
-enum CategoriaMovimiento {
-    COSTO_VENTA
-    DEPOSITO_CIERRE
-    DEPOSITO_PROVEEDOR
-    GASTO_OPERATIVO
-  }
-
-// =======================> ESTADO DE CAJA Y MOVIMIENTOS A MEJORAR BOTOM
+// =======================> MOVIMIENTOS FINANCIEROS Y OTROS 
 
 
 // ==========================> TABLAS PARA MODULO DE PEDIDOS
@@ -348,6 +461,13 @@ model CompraDetalle {
   actualizadoEn   DateTime @updatedAt
 }
 
+enum EstadoCompra {
+  RECIBIDO
+  CANCELADO
+  RECIBIDO_PARCIAL
+  ESPERANDO_ENTREGA   // <— lo dejamos en el enum
+}
+ 
 model Compra {
   id           Int      @id @default(autoincrement())
   sucursalId   Int?   
@@ -355,12 +475,15 @@ model Compra {
   fecha        DateTime @default(now())
   total        Float
   detalles     CompraDetalle[]
-
+  estado EstadoCompra @default(ESPERANDO_ENTREGA)  // TEMPORAL, no usar aún el valor nuevo
   requisicionId  Int?          @unique
   requisicion    Requisicion?  @relation(fields: [requisicionId], references: [id], onDelete: Cascade)
 
-  proveedorId  Int
-  proveedor    Proveedor @relation(fields:[proveedorId], references:[id])
+  ingresadaAStock        Boolean   @default(false)
+  cantidadRecibidaAcumulada Int @default(0)
+
+  proveedorId  Int?
+  proveedor    Proveedor? @relation(fields:[proveedorId], references:[id], onDelete: SetNull)
   usuarioId    Int
   usuario      Usuario   @relation(fields:[usuarioId], references:[id])
 
@@ -417,7 +540,7 @@ model PedidoLinea {
   cantidad       Int
   precioUnitario Float      // precio acordado con el cliente (puede ser null si lo defines luego)
   subtotal       Float      @default(0)  // puede llenarse en un hook (cantidad×precioUnitario)
-
+ 
   notas          String?    // por si el cliente pide algo especial en esa línea
   creadoEn       DateTime   @default(now())
   actualizadoEn  DateTime   @updatedAt
@@ -923,7 +1046,7 @@ model Usuario {
   compras Compra[]
   pedidos Pedido[]
   saldoGlobalSnapshots SaldoGlobalDiario[]
-  movimientosCaja       MovimientoCaja[]
+  movimientosCaja       MovimientoFinanciero[]
 }
 
 model MetaUsuario {
@@ -1291,7 +1414,7 @@ model Proveedor {
   Garantia Garantia[]
   //REFERNCIA AL registro final
   compras Compra[]
-  movimientosCaja MovimientoCaja[]
+  movimientosCaja MovimientoFinanciero[]
 }
 
 model Categoria {
@@ -1332,6 +1455,7 @@ enum TipoSucursal {
 
 enum MetodoPago {
   CONTADO
+  EFECTIVO
   TARJETA
   TRANSFERENCIA
   PAYPAL

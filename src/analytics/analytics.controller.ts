@@ -22,6 +22,13 @@ export class AnalyticsController {
     return this.analyticsService.create(createAnalyticsDto);
   }
 
+  @Get('dashboard-summary/:idSucursal')
+  async getDashboardSummary(
+    @Param('idSucursal', ParseIntPipe) idSucursal: number,
+  ) {
+    return this.analyticsService.getDashboardSummary(idSucursal);
+  }
+
   @Get('/venta-dia/:idSucursal')
   async getVentasDiaII(@Param('idSucursal', ParseIntPipe) idSucursal: number) {
     console.log(

@@ -9,15 +9,19 @@ import {
   ValidateIf,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { CategoriaMovimiento, TipoMovimientoCaja } from '@prisma/client';
+import {
+  // CategoriaMovimiento,
+  GastoOperativoTipo,
+  // TipoMovimientoCaja,
+} from '@prisma/client';
 
 export class CreateMovimientoCajaDto {
-  @IsEnum(TipoMovimientoCaja, { message: 'Tipo inválido' })
-  tipo: TipoMovimientoCaja;
+  // @IsEnum(TipoMovimientoCaja, { message: 'Tipo inválido' })
+  // tipo: TipoMovimientoCaja;
 
-  @IsOptional()
-  @IsEnum(CategoriaMovimiento, { message: 'Categoría inválida' })
-  categoria?: CategoriaMovimiento;
+  // @IsOptional()
+  // @IsEnum(CategoriaMovimiento, { message: 'Categoría inválida' })
+  // categoria?: CategoriaMovimiento;
 
   @IsOptional()
   @Type(() => Number)
@@ -67,4 +71,6 @@ export class CreateMovimientoCajaDto {
   @IsOptional()
   @IsISO8601({}, { message: 'fecha debe estar en formato ISO 8601' })
   fecha?: string;
+
+  gastoOperativoTipo: GastoOperativoTipo;
 }

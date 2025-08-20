@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  HttpException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -233,15 +234,20 @@ export class VentaService {
           data: { metodoPago: { connect: { id: pago.id } } },
         });
 
-        await this.cajaService.linkVentaToCajaTx(tx, venta.id, sucursalId, {
-          exigirCajaSiEfectivo: true,
-        });
+        await this.cajaService.attachAndRecordSaleTx(
+          tx,
+          venta.id,
+          sucursalId,
+          usuarioId,
+          { exigirCajaSiEfectivo: true },
+        );
 
         return venta;
       });
     } catch (e) {
       console.error('Error en createVenta:', e);
-      throw new InternalServerErrorException('Error al crear la venta');
+      if (e instanceof HttpException) throw e;
+      throw new InternalServerErrorException('Fatal error:Error inesperado');
     }
   }
 
