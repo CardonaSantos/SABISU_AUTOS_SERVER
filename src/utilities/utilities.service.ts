@@ -3,11 +3,12 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { CreateUtilityDto } from './dto/create-utility.dto';
 import { UpdateUtilityDto } from './dto/update-utility.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { Prisma } from '@prisma/client';
+import { EstadoTurnoCaja, Prisma } from '@prisma/client';
 import { GenerateStockDto } from './dto/generate-stock.dto';
 import { EntregaStockData } from './utils';
 
@@ -21,18 +22,30 @@ export class UtilitiesService {
     dtos: GenerateStockDto[],
     entregaStockData?: EntregaStockData,
   ) {
-    console.log('El dto entranod a generar el stock es: ', dtos);
+    this.logger.log('El dto entranod a generar el stock es: ', dtos);
 
     let entregaStock;
 
     if (entregaStockData) {
       entregaStock = await tx.entregaStock.create({
         data: {
-          proveedorId: entregaStockData.proveedorId,
+          proveedor: {
+            connect: {
+              id: entregaStockData.proveedorId,
+            },
+          },
           montoTotal: entregaStockData.montoTotal,
           fechaEntrega: entregaStockData.fechaEntrega ?? new Date(),
-          recibidoPorId: entregaStockData.recibidoPorId,
-          sucursalId: entregaStockData.sucursalId,
+          usuarioRecibido: {
+            connect: {
+              id: entregaStockData.recibidoPorId,
+            },
+          },
+          sucursal: {
+            connect: {
+              id: entregaStockData.sucursalId,
+            },
+          },
         },
       });
     }
@@ -65,5 +78,74 @@ export class UtilitiesService {
 
     this.logger.debug('El nuevo registro de stock es: ', newStocksCreated);
     return { newStocksCreated, entregaStock }; // Retorna ambos registros
+  }
+
+  //SERVICIOS DE UTILIDADES PARA TRUNCAR MOVIMIENTOS MAYORES Y EVITAR CAJAS NEGATIVAS
+
+  // Dentro de tu servicio de Caja
+  async getCajaEstado(tx: Prisma.TransactionClient, registroCajaId: number) {
+    const turno = await tx.registroCaja.findUnique({
+      where: { id: registroCajaId },
+      select: {
+        id: true,
+        estado: true,
+        saldoInicial: true,
+        fondoFijo: true,
+        sucursalId: true,
+      },
+    });
+    if (!turno || turno.estado !== EstadoTurnoCaja.ABIERTO) {
+      throw new BadRequestException('Turno no encontrado o ya cerrado');
+    }
+
+    const agg = await tx.movimientoFinanciero.aggregate({
+      _sum: { deltaCaja: true },
+      where: { registroCajaId },
+    });
+
+    const saldoInicial = Number(turno.saldoInicial ?? 0);
+    const fondoFijo = Number(turno.fondoFijo ?? 0);
+    const deltaCajaAcum = Number(agg._sum.deltaCaja ?? 0);
+
+    const enCaja = saldoInicial + deltaCajaAcum; // puede ser < 0 si hubo mal registro
+    const enCajaOperable = Math.max(0, enCaja); // para límites
+    const maxDeposito = Math.max(enCaja - fondoFijo, 0); // “depositar todo” respetando fondo
+
+    return {
+      turno,
+      saldoInicial,
+      fondoFijo,
+      enCaja,
+      enCajaOperable,
+      maxDeposito,
+    };
+  }
+
+  async validarMovimientoEfectivo(
+    tx: Prisma.TransactionClient,
+    registroCajaId: number,
+    deltaCajaPropuesto: number,
+  ) {
+    const { enCaja } = await this.getCajaEstado(tx, registroCajaId);
+    if (enCaja + deltaCajaPropuesto < 0) {
+      // si es egreso (deltaCajaPropuesto < 0), calcula cuánto sí se puede
+      const maxEgresoPosible = Math.max(enCaja, 0);
+      throw new UnprocessableEntityException(
+        `Efectivo insuficiente. Disponible: Q ${maxEgresoPosible.toFixed(2)}`,
+      );
+    }
+  }
+
+  async validarDepositoCierre(
+    tx: Prisma.TransactionClient,
+    registroCajaId: number,
+    monto: number, // positivo
+  ) {
+    const { maxDeposito } = await this.getCajaEstado(tx, registroCajaId);
+    if (monto > maxDeposito) {
+      throw new UnprocessableEntityException(
+        `Depósito excede el efectivo disponible. Máximo permitido: Q ${maxDeposito.toFixed(2)}`,
+      );
+    }
   }
 }

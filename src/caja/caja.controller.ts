@@ -15,6 +15,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { CerrarCajaDto } from './dto/CerrarCajaDto';
 import { CerrarCajaV2Dto } from './cerrarCajaTypes';
 import { GetCajasQueryDto } from './GetCajasQueryDto ';
+import { getCajasToCompraDto } from './getCajasToCompra.dto';
 
 @Controller('caja')
 export class CajaController {
@@ -118,5 +119,10 @@ export class CajaController {
   @Get('list-cajas')
   list(@Query() dto: GetCajasQueryDto) {
     return this.cajaService.list(dto);
+  }
+
+  @Get('cajas-disponibles/:id')
+  getCajasDisponiblesToCompra(@Param('id', ParseIntPipe) id: number) {
+    return this.cajaService.getCajasAbiertasToCompra(id);
   }
 }

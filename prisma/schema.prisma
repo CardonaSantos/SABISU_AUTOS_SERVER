@@ -506,45 +506,61 @@ enum PedidoEstado {
 }
 
 /// Cabecera del pedido de cliente
-model Pedido {
-  id             Int           @id @default(autoincrement())
-  folio          String        @unique                     // p.ej. “PED-2025-0001”
-  fecha          DateTime      @default(now())              
-  sucursalId     Int                                             // en qué tienda/clientes se creó
-  sucursal       Sucursal     @relation(fields: [sucursalId], references: [id])
-  clienteId      Int                                             // quien pide
-  cliente        Cliente      @relation(fields: [clienteId], references: [id])
-  usuarioId      Int                                             // quién registró el pedido
-  usuario        Usuario      @relation(fields: [usuarioId], references: [id])
-  estado         PedidoEstado @default(PENDIENTE)
-  observaciones  String?                                        // notas adicionales
-  totalLineas    Int          @default(0)                       // número de líneas
-  totalPedido    Float?                                        // suma de (cantidad×precio) de las líneas
-  creadoEn       DateTime     @default(now())
-  actualizadoEn  DateTime     @updatedAt
-  lineas         PedidoLinea[]                                  // detalle de productos
-  /// Opcional: si quieres enlazar este pedido a la Compra que generes
-  compraId       Int?          @unique
-  compra         Compra?       @relation("PedidoACompra",fields: [compraId],references: [id])
+enum PedidoPrioridad {
+  ALTA
+  BAJA
+  MEDIA
 }
+
+enum TipoPedido {
+  INTERNO
+  CLIENTE
+}
+
+
+  model Pedido {
+    id             Int           @id @default(autoincrement())
+    folio          String        @unique                     // p.ej. “PED-2025-0001”
+    fecha          DateTime      @default(now())              
+    sucursalId     Int                                             // en qué tienda/clientes se creó
+    sucursal       Sucursal     @relation(fields: [sucursalId], references: [id])
+    clienteId      Int                                             // quien pide
+    cliente        Cliente      @relation(fields: [clienteId], references: [id])
+    usuarioId      Int                                             // quién registró el pedido
+    usuario        Usuario      @relation(fields: [usuarioId], references: [id])
+    estado         PedidoEstado @default(PENDIENTE)
+    observaciones  String?                                        // notas adicionales
+    totalLineas    Int          @default(0)                       // número de líneas
+    totalPedido    Float?                                        // suma de (cantidad×precio) de las líneas
+    creadoEn       DateTime     @default(now())
+    actualizadoEn  DateTime     @updatedAt
+    lineas         PedidoLinea[]                                  // detalle de productos
+    /// Opcional: si quieres enlazar este pedido a la Compra que generes
+    compraId       Int?          @unique
+    compra         Compra?       @relation("PedidoACompra",fields: [compraId],references: [id])
+
+    tipo TipoPedido @default(INTERNO)
+    prioridad PedidoPrioridad @default(MEDIA)
+
+  }
 
 /// Cada línea de un pedido de cliente
-model PedidoLinea {
-  id             Int       @id @default(autoincrement())
-  pedidoId       Int
-  pedido         Pedido    @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+  model PedidoLinea {
+    id             Int       @id @default(autoincrement())
+    pedidoId       Int
+    pedido         Pedido    @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
 
-  productoId     Int
-  producto       Producto  @relation(fields: [productoId], references: [id])
+    productoId     Int
+    producto       Producto  @relation(fields: [productoId], references: [id])
 
-  cantidad       Int
-  precioUnitario Float      // precio acordado con el cliente (puede ser null si lo defines luego)
-  subtotal       Float      @default(0)  // puede llenarse en un hook (cantidad×precioUnitario)
- 
-  notas          String?    // por si el cliente pide algo especial en esa línea
-  creadoEn       DateTime   @default(now())
-  actualizadoEn  DateTime   @updatedAt
-}
+    cantidad       Int
+    precioUnitario Float      // precio acordado con el cliente (puede ser null si lo defines luego)
+    subtotal       Float      @default(0)  // puede llenarse en un hook (cantidad×precioUnitario)
+  
+    notas          String?    // por si el cliente pide algo especial en esa línea
+    creadoEn       DateTime   @default(now())
+    actualizadoEn  DateTime   @updatedAt
+  }
 // ==========================> TABLAS PARA MODULO DE PEDIDOS
 
 
@@ -1454,14 +1470,15 @@ enum TipoSucursal {
 }
 
 enum MetodoPago {
-  CONTADO
+  CONTADO//quitar en su momento y cambiar en ventas
   EFECTIVO
-  TARJETA
   TRANSFERENCIA
-  PAYPAL
-  OTRO
-  CUTOAS
-  CREDITO
+  TARJETA
+  CHEQUE             // banco
+  CREDITO// a futuro pero de momento no lo voy a usar
+  // NUEVOS
+  // DEPOSITO_VENTANILLA // depósito en ventanilla (usamos flags para distinguir a quién)
+  OTRO // opcional no lo uso de momento
 }
 
 enum TipoPrecio {

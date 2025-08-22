@@ -1,5 +1,5 @@
 export interface EntregaStockData {
-  proveedorId?: number;
+  proveedorId: number;
   montoTotal?: number;
   fechaEntrega?: Date;
   recibidoPorId?: number;

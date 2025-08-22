@@ -56,6 +56,9 @@ import { MovimientosCajasModule } from './movimientos-cajas/movimientos-cajas.mo
 import { ResumenDiaModule } from './resumen-dia/resumen-dia.module';
 import { MovimientoFinancieroModule } from './movimiento-financiero/movimiento-financiero.module';
 import { CuentasBancariasModule } from './cuentas-bancarias/cuentas-bancarias.module';
+import { ResumenesAdminModule } from './resumenes-admin/resumenes-admin.module';
+import { CronSnapshootModule } from './cron-snapshoot/cron-snapshoot.module';
+import { SaldosServiceService } from './crion-snapshoot/saldos-service/saldos-service.service';
 
 @Module({
   imports: [
@@ -115,8 +118,10 @@ import { CuentasBancariasModule } from './cuentas-bancarias/cuentas-bancarias.mo
     ResumenDiaModule,
     MovimientoFinancieroModule,
     CuentasBancariasModule,
+    ResumenesAdminModule,
+    CronSnapshootModule,
   ],
   controllers: [AppController],
-  providers: [AppService, CloudinaryProvider],
+  providers: [AppService, CloudinaryProvider, SaldosServiceService],
 })
 export class AppModule {}

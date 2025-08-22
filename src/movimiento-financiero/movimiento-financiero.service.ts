@@ -1,144 +1,225 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { CreateMovimientoFinancieroDto } from './dto/create-movimiento-financiero.dto';
 import { UpdateMovimientoFinancieroDto } from './dto/update-movimiento-financiero.dto';
 import {
   ClasificacionAdmin,
   EstadoTurnoCaja,
   MotivoMovimiento,
+  Prisma,
 } from '@prisma/client';
 import { CrearMovimientoDto } from './dto/crear-movimiento.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
-
+import { UtilitiesService } from 'src/utilities/utilities.service';
+type Tx = Prisma.TransactionClient;
 @Injectable()
 export class MovimientoFinancieroService {
   private readonly logger = new Logger(MovimientoFinancieroService.name);
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly utilities: UtilitiesService,
+  ) {}
 
   async crearMovimiento(dto: CrearMovimientoDto) {
-    this.logger.debug(
-      'La data del dto al crear nuevos movimientos financieros es: ',
-      dto,
-    );
+    this.logger.debug('DTO crear movimiento:', dto);
+
     const { sucursalId, usuarioId, motivo, monto } = dto;
     if (!sucursalId || !usuarioId) {
       throw new BadRequestException('sucursalId y usuarioId son obligatorios');
     }
     if (monto <= 0) throw new BadRequestException('monto inválido');
 
-    // 1) Derivar clasificacion + deltas
-    const { clasificacion, deltaCaja, deltaBanco, necesitaTurno } =
-      this.mapMotivoToEffects(dto);
-
-    // 2) Validaciones de turno cuando hay efectivo
-    let registroCajaId: number | null = dto.registroCajaId ?? null;
-    if (necesitaTurno) {
-      if (!registroCajaId) {
-        // buscar turno abierto de la sucursal si no lo mandaron
-        const abierto = await this.prisma.registroCaja.findFirst({
-          where: {
-            sucursalId,
-            estado: EstadoTurnoCaja.ABIERTO,
-            fechaCierre: null,
-          },
-          select: { id: true },
-        });
-        if (!abierto)
-          throw new BadRequestException(
-            'No hay caja abierta para movimientos con efectivo',
-          );
-        registroCajaId = abierto.id;
-      } else {
-        const turno = await this.prisma.registroCaja.findUnique({
-          where: { id: registroCajaId },
-          select: { id: true, estado: true, sucursalId: true },
-        });
-        if (
-          !turno ||
-          turno.estado !== EstadoTurnoCaja.ABIERTO ||
-          turno.sucursalId !== sucursalId
-        ) {
-          throw new BadRequestException('Turno inválido para este movimiento');
-        }
-      }
-    }
-
-    // 1) Inferir metodoPago si no viene
+    // 0) Normalizar método de pago ANTES del mapeo
     if (!dto.metodoPago) {
-      if (
-        dto.motivo === 'DEPOSITO_CIERRE' ||
-        dto.motivo === 'PAGO_PROVEEDOR_BANCO'
-      ) {
+      if (motivo === 'DEPOSITO_CIERRE' || motivo === 'PAGO_PROVEEDOR_BANCO') {
         dto.metodoPago = 'TRANSFERENCIA';
       } else {
         dto.metodoPago = dto.cuentaBancariaId ? 'TRANSFERENCIA' : 'EFECTIVO';
       }
     }
 
-    if (dto.metodoPago === 'EFECTIVO') {
-      if (dto.cuentaBancariaId) {
-        throw new BadRequestException(
-          'No envíes cuenta bancaria para pagos en efectivo',
-        );
-      }
-      // aquí tu lógica de necesitaTurno ya obliga registroCajaId o lo infiere
-    } else {
-      if (dto.registroCajaId) {
-        throw new BadRequestException(
-          'Los movimientos bancarios no deben adjuntar registroCajaId',
-        );
-      }
-      if (!dto.cuentaBancariaId) {
-        throw new BadRequestException(
-          'Cuenta bancaria requerida para movimiento no-efectivo',
-        );
-      }
-    }
-    // 3) Reglas especiales
-    if (dto.esDepositoCierre) {
-      if (!(deltaCaja < 0 && deltaBanco > 0)) {
-        throw new BadRequestException(
-          'Depósito de cierre debe mover caja(-) y banco(+)',
-        );
-      }
-    }
-    if (dto.esDepositoProveedor) {
-      if (
-        !(
-          deltaCaja < 0 &&
-          deltaBanco === 0 &&
-          clasificacion === ClasificacionAdmin.COSTO_VENTA
-        )
-      ) {
-        throw new BadRequestException(
-          'Depósito a proveedor debe ser egreso de caja y costo de venta',
-        );
-      }
+    // 1) Derivar clasificación y deltas (no toca DB)
+    const { clasificacion, deltaCaja, deltaBanco } =
+      this.mapMotivoToEffects(dto);
+    const afectaCaja = Number(deltaCaja) !== 0;
+    const afectaBanco = Number(deltaBanco) !== 0;
+
+    if (!afectaCaja && !afectaBanco) {
+      throw new BadRequestException(
+        'El movimiento no afecta ni caja ni banco.',
+      );
     }
 
-    // 4) Crear movimiento
-    const mov = await this.prisma.movimientoFinanciero.create({
-      data: {
-        sucursalId,
-        registroCajaId,
-        clasificacion,
-        motivo,
-        metodoPago: dto.metodoPago ?? null,
-        deltaCaja,
-        deltaBanco,
-        cuentaBancariaId: dto.cuentaBancariaId ?? null,
-        descripcion: dto.descripcion ?? null,
-        referencia: dto.referencia ?? null,
-        esDepositoCierre: !!dto.esDepositoCierre,
-        esDepositoProveedor: !!dto.esDepositoProveedor,
-        proveedorId: dto.proveedorId ?? null,
-        gastoOperativoTipo: (dto.gastoOperativoTipo as any) ?? null,
-        costoVentaTipo: (dto.costoVentaTipo as any) ?? null,
-        afectaInventario: this.afectaInventario(motivo),
-        usuarioId,
+    // 2) Coherencia método de pago ↔ efectos
+    const esDepositoCierre =
+      dto.motivo === 'DEPOSITO_CIERRE' || !!dto.esDepositoCierre;
+
+    if (dto.metodoPago === 'EFECTIVO' && afectaBanco) {
+      throw new BadRequestException('Efectivo no puede afectar banco.');
+    }
+    if (dto.metodoPago !== 'EFECTIVO' && afectaCaja && !esDepositoCierre) {
+      throw new BadRequestException(
+        'Un movimiento no-efectivo no debe afectar caja (salvo depósito de cierre).',
+      );
+    }
+
+    // 3) Transacción: todo lo que mire/grabe en DB va adentro
+    return this.prisma.$transaction(
+      async (tx: Tx) => {
+        // 3.1) Resolver/validar turno dentro de la transacción
+        let registroCajaId: number | null = dto.registroCajaId ?? null;
+
+        if (afectaCaja) {
+          if (!registroCajaId) {
+            const abierto = await tx.registroCaja.findFirst({
+              where: {
+                sucursalId,
+                estado: EstadoTurnoCaja.ABIERTO,
+                fechaCierre: null,
+              },
+              select: { id: true, sucursalId: true },
+            });
+            if (!abierto) {
+              throw new BadRequestException(
+                'No hay caja abierta para movimientos con efectivo.',
+              );
+            }
+            registroCajaId = abierto.id;
+          } else {
+            const turno = await tx.registroCaja.findUnique({
+              where: { id: registroCajaId },
+              select: { id: true, estado: true, sucursalId: true },
+            });
+            if (
+              !turno ||
+              turno.estado !== EstadoTurnoCaja.ABIERTO ||
+              turno.sucursalId !== sucursalId
+            ) {
+              throw new BadRequestException(
+                'Turno inválido para este movimiento.',
+              );
+            }
+          }
+        } else {
+          if (registroCajaId) {
+            throw new BadRequestException(
+              'Movimientos solo bancarios no deben adjuntar registroCajaId.',
+            );
+          }
+        }
+
+        // 3.2) Reglas de banco dentro de la transacción
+        if (afectaBanco) {
+          if (!dto.cuentaBancariaId) {
+            throw new BadRequestException(
+              'Cuenta bancaria requerida para movimientos bancarios.',
+            );
+          }
+        } else {
+          if (dto.cuentaBancariaId) {
+            throw new BadRequestException(
+              'No envíes cuenta bancaria si el movimiento no afecta banco.',
+            );
+          }
+        }
+
+        // 3.3) Reglas especiales
+        if (esDepositoCierre) {
+          if (!(deltaCaja < 0 && deltaBanco > 0)) {
+            throw new BadRequestException(
+              'Depósito de cierre debe mover caja(-) y banco(+).',
+            );
+          }
+          if (!registroCajaId) {
+            throw new BadRequestException(
+              'Depósito de cierre requiere turno de caja.',
+            );
+          }
+          if (!dto.cuentaBancariaId) {
+            throw new BadRequestException(
+              'Depósito de cierre requiere cuenta bancaria de destino.',
+            );
+          }
+        }
+
+        if (dto.esDepositoProveedor) {
+          if (
+            !(
+              afectaCaja &&
+              deltaCaja < 0 &&
+              !afectaBanco &&
+              clasificacion === ClasificacionAdmin.COSTO_VENTA
+            )
+          ) {
+            throw new BadRequestException(
+              'Depósito a proveedor debe ser egreso de caja y costo de venta.',
+            );
+          }
+        }
+
+        // 3.4) PRE-GUARDS de efectivo (anti caja negativa)
+        if (afectaCaja && registroCajaId) {
+          await this.utilities.validarMovimientoEfectivo(
+            tx,
+            registroCajaId,
+            Number(deltaCaja),
+          );
+
+          if (esDepositoCierre) {
+            const montoAbs = Math.abs(Number(deltaCaja)); // deltaCaja < 0
+            await this.utilities.validarDepositoCierre(
+              tx,
+              registroCajaId,
+              montoAbs,
+            );
+          }
+        }
+
+        // 3.5) Crear movimiento
+        const mov = await tx.movimientoFinanciero.create({
+          data: {
+            sucursalId,
+            registroCajaId,
+            clasificacion,
+            motivo,
+            metodoPago: dto.metodoPago ?? null,
+            deltaCaja,
+            deltaBanco,
+            cuentaBancariaId: dto.cuentaBancariaId ?? null,
+            descripcion: dto.descripcion ?? null,
+            referencia: dto.referencia ?? null,
+            esDepositoCierre: !!dto.esDepositoCierre,
+            esDepositoProveedor: !!dto.esDepositoProveedor,
+            proveedorId: dto.proveedorId ?? null,
+            gastoOperativoTipo: (dto.gastoOperativoTipo as any) ?? null,
+            costoVentaTipo: (dto.costoVentaTipo as any) ?? null,
+            afectaInventario: this.afectaInventario(motivo),
+            usuarioId,
+          },
+        });
+
+        // 3.6) POST-CHECK: revalidar que la caja no quedó negativa
+        if (afectaCaja && registroCajaId) {
+          const { enCaja } = await this.utilities.getCajaEstado(
+            tx,
+            registroCajaId,
+          );
+          if (enCaja < 0) {
+            throw new Error('Caja negativa tras el movimiento; rollback.');
+          }
+        }
+
+        return mov;
       },
-    });
-
-    return mov;
+      {
+        // Si tu motor lo soporta, esto minimiza condiciones de carrera
+        isolationLevel: 'Serializable',
+      },
+    );
   }
 
   private mapMotivoToEffects(dto: CrearMovimientoDto) {

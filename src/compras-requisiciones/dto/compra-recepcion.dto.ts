@@ -1,5 +1,13 @@
 // dto/compra-recepcion-auto.dto.ts
-import { IsInt, IsOptional, IsString } from 'class-validator';
+import { MetodoPago } from '@prisma/client';
+import {
+  IsEnum,
+  IsIn,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 
 export class RecepcionarCompraAutoDto {
   @IsInt()
@@ -14,4 +22,17 @@ export class RecepcionarCompraAutoDto {
   @IsOptional()
   @IsString()
   observaciones?: string;
+
+  @IsEnum(MetodoPago)
+  metodoPago: MetodoPago;
+
+  @IsNumber()
+  @IsOptional()
+  registroCajaId?: number;
+
+  @IsInt()
+  sucursalId: number;
+
+  @IsInt()
+  cuentaBancariaId: number;
 }

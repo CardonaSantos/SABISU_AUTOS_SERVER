@@ -16,7 +16,7 @@ import * as timezone from 'dayjs/plugin/timezone';
 import * as isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
 import * as isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
 import { TZGT } from 'src/utils/utils';
-import { Prisma, TipoMovimientoStock } from '@prisma/client';
+import { MetodoPago, Prisma, TipoMovimientoStock } from '@prisma/client';
 import { ComprasRegistrosQueryDto } from './dto/compras-registros.query.dto';
 import {
   CreateRequisicionRecepcionDto,
@@ -640,6 +640,277 @@ export class PurchaseRequisitionsService {
    * - Actualiza requisicion.lineas cantidadRecibida / ingresadaAStock
    * - Ajusta estado de Compra (RECIBIDO / RECIBIDO_PARCIAL)
    */
+  // async makeRecepcionCompraAuto(dto: RecepcionarCompraAutoDto) {
+  //   try {
+  //     this.logger.log('La data llegando es: ', dto);
+  //     return await this.prisma.$transaction(async (tx) => {
+  //       const compra = await tx.compra.findUnique({
+  //         where: { id: dto.compraId },
+  //         include: {
+  //           detalles: {
+  //             select: {
+  //               id: true,
+  //               cantidad: true,
+  //               costoUnitario: true,
+  //               productoId: true,
+  //               requisicionLineaId: true,
+  //             },
+  //           },
+  //           proveedor: { select: { id: true } },
+  //         },
+  //       });
+  //       if (!compra) throw new NotFoundException('Compra no encontrada');
+
+  //       const sucursalId = compra.sucursalId;
+  //       if (!sucursalId) {
+  //         throw new BadRequestException(
+  //           'La compra no tiene sucursal asociada.',
+  //         );
+  //       }
+  //       const proveedorIdEfectivo = compra.proveedorId ?? undefined;
+
+  //       let requisicionRecepcionId: number | null = null;
+  //       if (compra.requisicionId) {
+  //         const reqMain = await tx.requisicion.findUnique({
+  //           where: { id: compra.requisicionId },
+  //         });
+  //         if (!reqMain)
+  //           throw new NotFoundException(
+  //             'Requisición origen no encontrada para la compra',
+  //           );
+
+  //         const recep = await tx.requisicionRecepcion.create({
+  //           data: {
+  //             observaciones: dto.observaciones ?? null,
+  //             usuario: { connect: { id: dto.usuarioId } },
+  //             requisicion: { connect: { id: reqMain.id } },
+  //             fechaRecepcion: dayjs().tz(TZGT).toDate(),
+  //           },
+  //         });
+  //         requisicionRecepcionId = recep.id;
+  //       }
+
+  //       const nowISO = dayjs().tz(TZGT).toISOString();
+  //       const stockDtos: Array<any> = [];
+  //       const lineasRecep: Array<any> = [];
+
+  //       let solicitadoTotal = 0;
+  //       let recibidoEnEsta = 0;
+
+  //       for (const det of compra.detalles) {
+  //         const cantidadSolicitada = det.cantidad ?? 0;
+  //         const cantidadRecibida = cantidadSolicitada;
+  //         solicitadoTotal += cantidadSolicitada;
+  //         recibidoEnEsta += cantidadRecibida;
+
+  //         const precioUnitario = det.costoUnitario ?? 0;
+
+  //         if (det.requisicionLineaId && requisicionRecepcionId) {
+  //           const reqLinea = await tx.requisicionLinea.findUnique({
+  //             where: { id: det.requisicionLineaId },
+  //             select: { cantidadRecibida: true },
+  //           });
+
+  //           await tx.requisicionRecepcionLinea.create({
+  //             data: {
+  //               requisicionRecepcion: {
+  //                 connect: { id: requisicionRecepcionId },
+  //               },
+  //               requisicionLinea: { connect: { id: det.requisicionLineaId } },
+  //               producto: { connect: { id: det.productoId } },
+  //               cantidadSolicitada,
+  //               cantidadRecibida,
+  //               ingresadaAStock: true,
+  //             },
+  //           });
+
+  //           await tx.requisicionLinea.update({
+  //             where: { id: det.requisicionLineaId },
+  //             data: {
+  //               cantidadRecibida:
+  //                 (reqLinea?.cantidadRecibida ?? 0) + cantidadRecibida,
+  //               ingresadaAStock: true,
+  //             },
+  //           });
+  //         }
+
+  //         stockDtos.push({
+  //           productoId: det.productoId,
+  //           cantidad: cantidadRecibida,
+  //           costoTotal: precioUnitario * cantidadRecibida,
+  //           fechaIngreso: nowISO,
+  //           fechaExpiracion: null, // si manejas perecederos, aquí podrías calcular o dejar null
+  //           precioCosto: precioUnitario,
+  //           sucursalId,
+  //           requisicionRecepcionId: requisicionRecepcionId ?? undefined,
+  //         });
+
+  //         lineasRecep.push({
+  //           compraDetalleId: det.id,
+  //           productoId: det.productoId,
+  //           cantidadSolicitada,
+  //           cantidadRecibida,
+  //           precioUnitario,
+  //         });
+  //       }
+
+  //       const entregaStockData = {
+  //         fechaEntrega: dayjs().tz(TZGT).toDate(),
+  //         montoTotal: stockDtos.reduce(
+  //           (acc, s) => acc + (s.costoTotal ?? 0),
+  //           0,
+  //         ),
+  //         proveedorId: proveedorIdEfectivo ?? null,
+  //         sucursalId,
+  //         recibidoPorId: dto.usuarioId,
+  //       };
+
+  //       await this.tracker.trackIngresoProductos(
+  //         tx,
+  //         lineasRecep.map((l) => ({
+  //           productoId: l.productoId,
+  //           cantidadRecibida: l.cantidadRecibida,
+  //           precioUnitario: l.precioUnitario,
+  //           requisicionLineaId: undefined, // ya lo registramos arriba si aplica
+  //           cantidadSolicitada: l.cantidadSolicitada,
+  //         })),
+  //         sucursalId,
+  //         dto.usuarioId,
+  //         compra.requisicionId ?? null,
+  //         'ENTREGA_STOCK',
+  //         'Recepción TOTAL automática desde modúlo COMPRA',
+  //       );
+
+  //       const newStocks = await this.utilities.generateStockFromRequisicion(
+  //         tx,
+  //         stockDtos,
+  //         entregaStockData,
+  //       );
+
+  //       if (compra.requisicionId) {
+  //         const req = await tx.requisicion.findUnique({
+  //           where: { id: compra.requisicionId },
+  //           include: { lineas: true },
+  //         });
+  //         if (req) {
+  //           const todasRecibidas = req.lineas.every(
+  //             (ln) => (ln.cantidadRecibida ?? 0) >= ln.cantidadSugerida,
+  //           );
+  //           await tx.requisicion.update({
+  //             where: { id: req.id },
+  //             data: {
+  //               fechaRecepcion: dayjs().tz(TZGT).toDate(),
+  //               ingresadaAStock: true,
+  //               estado: todasRecibidas ? 'COMPLETADA' : 'RECIBIDA',
+  //             },
+  //           });
+  //         }
+  //       }
+
+  //       // 6) Marcar compra como recibida + flags opcionales
+  //       const estadoCompra =
+  //         recibidoEnEsta >= solicitadoTotal ? 'RECIBIDO' : 'RECIBIDO_PARCIAL';
+  //       const ahora = dayjs().tz(TZGT).toDate();
+
+  //       await tx.compra.update({
+  //         where: { id: compra.id },
+  //         data: {
+  //           estado: estadoCompra,
+  //           // si agregaste estos campos en Compra:
+  //           ingresadaAStock: true,
+  //           cantidadRecibidaAcumulada: compra.detalles.length,
+  //         },
+  //       });
+  //       //registrar movimiento financiero
+
+  //       const metodo = dto.metodoPago ?? 'EFECTIVO'; // o falla si no viene
+  //       const canal = this.paymentChannel(metodo);
+
+  //       let registroCajaId: number | undefined;
+  //       if (canal === 'CAJA') {
+  //         registroCajaId = dto.registroCajaId;
+  //         if (!registroCajaId) {
+  //           // intenta resolver automáticamente el turno abierto
+  //           const turno = await tx.registroCaja.findFirst({
+  //             where: { sucursalId, estado: 'ABIERTO' },
+  //             select: { id: true },
+  //           });
+  //           if (!turno)
+  //             throw new BadRequestException(
+  //               'No hay turno de caja ABIERTO para registrar el pago en efectivo.',
+  //             );
+  //           registroCajaId = turno.id;
+  //         }
+  //         if (dto.cuentaBancariaId) {
+  //           throw new BadRequestException(
+  //             'No especifiques cuenta bancaria para pagos en efectivo.',
+  //           );
+  //         }
+  //       }
+
+  //       let cuentaBancariaId: number | undefined;
+  //       if (canal === 'BANCO') {
+  //         if (!dto.cuentaBancariaId) {
+  //           throw new BadRequestException(
+  //             'Debes seleccionar la cuenta bancaria para pagos por banco.',
+  //           );
+  //         }
+  //         cuentaBancariaId = dto.cuentaBancariaId;
+  //         if (dto.registroCajaId) {
+  //           throw new BadRequestException(
+  //             'No especifiques registro de caja para pagos por banco.',
+  //           );
+  //         }
+  //       }
+
+  //       const montoRecepcion = entregaStockData.montoTotal;
+  //       const { deltaCaja, deltaBanco } = this.computeDeltas(
+  //         metodo,
+  //         montoRecepcion,
+  //       );
+
+  //       const mFinanciero = await tx.movimientoFinanciero.create({
+  //         data: {
+  //           fecha: dayjs().tz(TZGT).toDate(),
+  //           sucursalId,
+  //           clasificacion: 'COSTO_VENTA',
+  //           motivo: 'COMPRA_MERCADERIA',
+  //           metodoPago: metodo,
+  //           deltaCaja,
+  //           deltaBanco,
+  //           afectaInventario: true,
+  //           costoVentaTipo: 'MERCADERIA',
+  //           referencia: `COMPRA#${compra.id}`,
+  //           descripcion: `Compra #${compra.id} - recepción a stock`,
+  //           cuentaBancariaId,
+  //           registroCajaId,
+  //           proveedorId: compra.proveedor?.id ?? null,
+  //           usuarioId: dto.usuarioId,
+  //           conFactura: (compra as any).conFactura ?? undefined,
+  //         },
+  //       });
+
+  //       this.logger.log(
+  //         'El movimiento generado por ingreso de productos es: ',
+  //         mFinanciero,
+  //       );
+
+  //       return {
+  //         ok: true,
+  //         compra: { id: compra.id, estado: estadoCompra },
+  //         recepcion: requisicionRecepcionId
+  //           ? { id: requisicionRecepcionId }
+  //           : null,
+  //         lineas: lineasRecep,
+  //         stock: newStocks,
+  //       };
+  //     });
+  //   } catch (error) {
+  //     if (error instanceof HttpException) throw error;
+  //     throw new InternalServerErrorException('Fatal error: Error inesperado');
+  //   }
+  // }
+
   async makeRecepcionCompraAuto(dto: RecepcionarCompraAutoDto) {
     try {
       this.logger.log('La data llegando es: ', dto);
@@ -669,6 +940,7 @@ export class PurchaseRequisitionsService {
         }
         const proveedorIdEfectivo = compra.proveedorId ?? undefined;
 
+        // 1) Si hay requisición, crear la recepción (igual que antes)
         let requisicionRecepcionId: number | null = null;
         if (compra.requisicionId) {
           const reqMain = await tx.requisicion.findUnique({
@@ -690,9 +962,17 @@ export class PurchaseRequisitionsService {
           requisicionRecepcionId = recep.id;
         }
 
+        // 2) Armar DTOs para stock y líneas de recepción (igual que antes)
         const nowISO = dayjs().tz(TZGT).toISOString();
         const stockDtos: Array<any> = [];
-        const lineasRecep: Array<any> = [];
+        const lineasRecep: Array<{
+          compraDetalleId: number;
+          productoId: number;
+          cantidadSolicitada: number;
+          cantidadRecibida: number;
+          precioUnitario: number;
+        }> = [];
+
         let solicitadoTotal = 0;
         let recibidoEnEsta = 0;
 
@@ -704,6 +984,7 @@ export class PurchaseRequisitionsService {
 
           const precioUnitario = det.costoUnitario ?? 0;
 
+          // Actualizaciones de recepción/linea de requisición (igual que antes)
           if (det.requisicionLineaId && requisicionRecepcionId) {
             const reqLinea = await tx.requisicionLinea.findUnique({
               where: { id: det.requisicionLineaId },
@@ -738,7 +1019,7 @@ export class PurchaseRequisitionsService {
             cantidad: cantidadRecibida,
             costoTotal: precioUnitario * cantidadRecibida,
             fechaIngreso: nowISO,
-            fechaExpiracion: null, // si manejas perecederos, aquí podrías calcular o dejar null
+            fechaExpiracion: null,
             precioCosto: precioUnitario,
             sucursalId,
             requisicionRecepcionId: requisicionRecepcionId ?? undefined,
@@ -753,39 +1034,94 @@ export class PurchaseRequisitionsService {
           });
         }
 
+        // 3) Calcular cantidades anteriores por producto (antes de insertar stock)
+        const productIds = Array.from(
+          new Set(lineasRecep.map((l) => l.productoId)),
+        );
+        const cantidadesAnteriores: Record<number, number> = {};
+        await Promise.all(
+          productIds.map(async (pid) => {
+            const agg = await tx.stock.aggregate({
+              where: { productoId: pid, sucursalId },
+              _sum: { cantidad: true },
+            });
+            cantidadesAnteriores[pid] = agg._sum.cantidad ?? 0;
+          }),
+        );
+
+        // 4) Datos de entrega que usará el util
         const entregaStockData = {
           fechaEntrega: dayjs().tz(TZGT).toDate(),
           montoTotal: stockDtos.reduce(
             (acc, s) => acc + (s.costoTotal ?? 0),
             0,
           ),
-          proveedorId: proveedorIdEfectivo ?? null,
+          proveedorId: dto.proveedorId ?? null,
           sucursalId,
           recibidoPorId: dto.usuarioId,
         };
 
-        await this.tracker.trackIngresoProductos(
-          tx,
-          lineasRecep.map((l) => ({
-            productoId: l.productoId,
-            cantidadRecibida: l.cantidadRecibida,
-            precioUnitario: l.precioUnitario,
-            requisicionLineaId: undefined, // ya lo registramos arriba si aplica
-            cantidadSolicitada: l.cantidadSolicitada,
-          })),
-          sucursalId,
-          dto.usuarioId,
-          compra.requisicionId ?? null,
-          'ENTREGA_STOCK',
-          'Recepción TOTAL automática desde modúlo COMPRA',
-        );
-
+        // 5) Generar stock desde requisición (igual que antes) — crea la entrega internamente
         const newStocks = await this.utilities.generateStockFromRequisicion(
           tx,
           stockDtos,
           entregaStockData,
         );
 
+        // 6) Resolver entregaId para tracking (no cambiamos el util; resolvemos robusto)
+        let entregaId: number | null = null;
+
+        // a) Si tu util devuelve un objeto con entrega (ideal)
+        if (
+          newStocks &&
+          typeof newStocks === 'object' &&
+          'entrega' in newStocks
+        ) {
+          const maybeEntrega = (newStocks as any).entrega;
+          if (maybeEntrega?.id) entregaId = maybeEntrega.id;
+        }
+
+        // b) Si tu util devuelve arreglo de stocks con entregaStockId
+        if (!entregaId && Array.isArray(newStocks) && newStocks.length > 0) {
+          const first = newStocks[0] as any;
+          if (first?.entregaStockId) entregaId = first.entregaStockId;
+        }
+
+        // c) Fallback: buscar la última entrega del usuario en la sucursal dentro de la tx
+        if (!entregaId) {
+          const entregaGuess = await tx.entregaStock.findFirst({
+            where: { sucursalId, recibidoPorId: dto.usuarioId },
+            orderBy: { id: 'desc' },
+            select: { id: true },
+          });
+          entregaId = entregaGuess?.id ?? null;
+        }
+
+        // 7) Tracking correcto enlazado a la entrega
+        if (entregaId) {
+          const trackers = lineasRecep.map((l) => ({
+            productoId: l.productoId,
+            cantidadVendida: l.cantidadRecibida, // recibido = “vendida” para el tracker
+            cantidadAnterior: cantidadesAnteriores[l.productoId] ?? 0,
+          }));
+
+          await this.tracker.trackeEntregaStock(
+            tx,
+            trackers,
+            sucursalId,
+            dto.usuarioId,
+            entregaId,
+            'ENTREGA_STOCK',
+            'Recepción TOTAL automática desde modúlo COMPRA',
+          );
+        } else {
+          // No abortamos la transacción (mantenemos comportamiento), pero lo registramos
+          this.logger.warn(
+            '[makeRecepcionCompraAuto] No se pudo resolver entregaId para tracking; se omitió trackeEntregaStock.',
+          );
+        }
+
+        // 8) Actualizaciones de requisición (igual que antes)
         if (compra.requisicionId) {
           const req = await tx.requisicion.findUnique({
             where: { id: compra.requisicionId },
@@ -806,46 +1142,92 @@ export class PurchaseRequisitionsService {
           }
         }
 
-        // 6) Marcar compra como recibida + flags opcionales
+        // 9) Estado de compra (igual que antes)
         const estadoCompra =
           recibidoEnEsta >= solicitadoTotal ? 'RECIBIDO' : 'RECIBIDO_PARCIAL';
-        const ahora = dayjs().tz(TZGT).toDate();
 
         await tx.compra.update({
           where: { id: compra.id },
           data: {
             estado: estadoCompra,
-            // si agregaste estos campos en Compra:
             ingresadaAStock: true,
             cantidadRecibidaAcumulada: compra.detalles.length,
           },
         });
 
-        // const caja = await this.prisma.movimientoCaja.create({
-        //   data: {
-        //     monto: compra.total,
-        //     tipo: 'EGRESO',
-        //     categoria: 'COSTO_VENTA',
-        //     descripcion: `Movimiento caja por ingreso de productos No. ID: ${compra.id}, un total de: ${compra.total}`,
-        //     referencia: `Compra No.# ${compra.id}`,
-        //     fecha: dayjs().tz(TZGT).toDate(),
+        // 10) Movimiento financiero (igual que antes)
+        const metodo = dto.metodoPago ?? 'EFECTIVO';
+        const canal = this.paymentChannel(metodo);
 
-        //     usuario: {
-        //       connect: {
-        //         id: dto.usuarioId,
-        //       },
-        //     },
+        let registroCajaId: number | undefined;
+        if (canal === 'CAJA') {
+          registroCajaId = dto.registroCajaId;
+          if (!registroCajaId) {
+            const turno = await tx.registroCaja.findFirst({
+              where: { sucursalId, estado: 'ABIERTO' },
+              select: { id: true },
+            });
+            if (!turno)
+              throw new BadRequestException(
+                'No hay turno de caja ABIERTO para registrar el pago en efectivo.',
+              );
+            registroCajaId = turno.id;
+          }
+          if (dto.cuentaBancariaId) {
+            throw new BadRequestException(
+              'No especifiques cuenta bancaria para pagos en efectivo.',
+            );
+          }
+        }
 
-        //     proveedor: {
-        //       connect: {
-        //         id: dto.proveedorId,
-        //       },
-        //     },
-        //   },
-        // });
+        let cuentaBancariaId: number | undefined;
+        if (canal === 'BANCO') {
+          if (!dto.cuentaBancariaId) {
+            throw new BadRequestException(
+              'Debes seleccionar la cuenta bancaria para pagos por banco.',
+            );
+          }
+          cuentaBancariaId = dto.cuentaBancariaId;
+          if (dto.registroCajaId) {
+            throw new BadRequestException(
+              'No especifiques registro de caja para pagos por banco.',
+            );
+          }
+        }
 
-        // this.logger.log('La caja es: ', caja);
+        const montoRecepcion = entregaStockData.montoTotal;
+        const { deltaCaja, deltaBanco } = this.computeDeltas(
+          metodo,
+          montoRecepcion,
+        );
 
+        const mFinanciero = await tx.movimientoFinanciero.create({
+          data: {
+            fecha: dayjs().tz(TZGT).toDate(),
+            sucursalId,
+            clasificacion: 'COSTO_VENTA',
+            motivo: 'COMPRA_MERCADERIA',
+            metodoPago: metodo,
+            deltaCaja,
+            deltaBanco,
+            afectaInventario: true,
+            costoVentaTipo: 'MERCADERIA',
+            referencia: `COMPRA#${compra.id}`,
+            descripcion: `Compra #${compra.id} - recepción a stock`,
+            cuentaBancariaId,
+            registroCajaId,
+            proveedorId: compra.proveedor?.id ?? null,
+            usuarioId: dto.usuarioId,
+            conFactura: (compra as any).conFactura ?? undefined,
+          },
+        });
+
+        this.logger.log(
+          'El movimiento generado por ingreso de productos es: ',
+          mFinanciero,
+        );
+
+        // 11) Respuesta (misma forma que ya tenías)
         return {
           ok: true,
           compra: { id: compra.id, estado: estadoCompra },
@@ -857,8 +1239,43 @@ export class PurchaseRequisitionsService {
         };
       });
     } catch (error) {
+      this.logger.error('El error generado es: ', error);
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException('Fatal error: Error inesperado');
+    }
+  }
+
+  // helpers
+  paymentChannel(
+    m: MetodoPago | null | undefined,
+  ): 'CAJA' | 'BANCO' | 'NINGUNO' {
+    switch (m) {
+      case 'EFECTIVO':
+      case 'CONTADO':
+        return 'CAJA';
+      case 'TRANSFERENCIA':
+      case 'TARJETA':
+      case 'CHEQUE':
+        return 'BANCO';
+      case 'CREDITO':
+      default:
+        return 'NINGUNO';
+    }
+  }
+
+  computeDeltas(m: MetodoPago | null | undefined, monto: number) {
+    const x = Math.abs(Number(monto) || 0);
+    switch (m) {
+      case 'EFECTIVO':
+      case 'CONTADO':
+        return { deltaCaja: -x, deltaBanco: 0 };
+      case 'TRANSFERENCIA':
+      case 'TARJETA':
+      case 'CHEQUE':
+        return { deltaCaja: 0, deltaBanco: -x };
+      case 'CREDITO':
+      default:
+        return { deltaCaja: 0, deltaBanco: 0 };
     }
   }
 

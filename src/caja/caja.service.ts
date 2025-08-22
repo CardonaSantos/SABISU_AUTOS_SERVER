@@ -24,13 +24,12 @@ import * as timezone from 'dayjs/plugin/timezone';
 import * as isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
 import * as isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
 import { VentaLigadaACajaDTO } from './dto/new-dto';
-import { TZGT } from 'src/utils/utils';
-import { UtilidadesService } from './utilidades/utilidades.service';
-import { DepositoCierreDto } from 'src/movimiento-caja/dto/deposito-cierre-caja';
 import { IniciarCajaDto } from './dto/iniciar-caja.dto';
 import { CerrarCajaDto } from './dto/CerrarCajaDto';
 import { CerrarCajaV2Dto } from './cerrarCajaTypes';
 import { GetCajasQueryDto } from './GetCajasQueryDto ';
+import { UtilitiesService } from 'src/utilities/utilities.service';
+import { getCajasToCompraDto } from './getCajasToCompra.dto';
 dayjs.extend(utc);
 dayjs.extend(timezone);
 dayjs.extend(isSameOrBefore);
@@ -48,7 +47,7 @@ export class CajaService {
   private logger = new Logger(CajaService.name);
   constructor(
     private readonly prisma: PrismaService,
-    private readonly utilidades: UtilidadesService,
+    private readonly utilities: UtilitiesService,
   ) {}
   private toNum(n: any): number {
     return n == null ? 0 : Number(n);
@@ -301,6 +300,7 @@ export class CajaService {
     } = dto;
 
     return this.prisma.$transaction(async (tx) => {
+      // 1) Traer turno y validar estado
       const turno = await tx.registroCaja.findUnique({
         where: { id: registroCajaId },
         select: {
@@ -315,35 +315,52 @@ export class CajaService {
         throw new BadRequestException('Turno no encontrado o ya cerrado');
       }
 
-      // Σ deltaCaja del turno
+      // helpers
+      const n = (v: any) => Number(v ?? 0);
+      const round2 = (x: number) => Math.round(x * 100) / 100;
+
+      // 2) Σ deltaCaja del turno para calcular efectivo disponible
       const agg = await tx.movimientoFinanciero.aggregate({
         _sum: { deltaCaja: true },
         where: { registroCajaId: turno.id },
       });
-      const enCaja =
-        Number(turno.saldoInicial) + Number(agg._sum.deltaCaja ?? 0);
 
-      // --- Deposito según modo (simple) ---
+      const enCaja = round2(n(turno.saldoInicial) + n(agg._sum.deltaCaja));
+      const enCajaOperable = Math.max(0, enCaja); // nunca depositamos negativo
+
+      // 3) Calcular depósito según modo (con clamps)
       let deposito = 0;
-      if (modo === 'DEPOSITO_TODO') {
-        deposito = enCaja;
-      } else if (modo === 'DEPOSITO_PARCIAL') {
-        if (!montoParcial || montoParcial <= 0)
-          throw new BadRequestException('Monto parcial inválido');
-        deposito = Math.min(montoParcial, enCaja);
-      } else if (modo === 'SIN_DEPOSITO' || modo === 'CAMBIO_TURNO') {
-        deposito = 0; // no hay depósito en estos modos
-      } else {
-        throw new BadRequestException('Modo de cierre no soportado');
+      switch (modo) {
+        case 'DEPOSITO_TODO': {
+          // Si la caja está negativa o 0, depósito=0
+          deposito = enCajaOperable;
+          break;
+        }
+        case 'DEPOSITO_PARCIAL': {
+          if (!montoParcial || montoParcial <= 0) {
+            throw new BadRequestException('Monto parcial inválido');
+          }
+          deposito = Math.min(montoParcial, enCajaOperable);
+          deposito = round2(deposito);
+          break;
+        }
+        case 'SIN_DEPOSITO':
+        case 'CAMBIO_TURNO': {
+          deposito = 0;
+          break;
+        }
+        default:
+          throw new BadRequestException('Modo de cierre no soportado');
       }
 
-      // Validación de cuenta sólo si hay depósito
+      // 4) Si hay depósito (>0), exigir cuenta y crear movimiento
       let movDeposito: any = null;
       if (deposito > 0) {
-        if (!cuentaBancariaId)
+        if (!cuentaBancariaId) {
           throw new BadRequestException(
             'Cuenta bancaria requerida para depósito',
           );
+        }
         movDeposito = await tx.movimientoFinanciero.create({
           data: {
             sucursalId: turno.sucursalId,
@@ -361,13 +378,12 @@ export class CajaService {
         });
       }
 
-      // Recalcular saldo final y cerrar
+      // 5) Recalcular saldo final real y cerrar turno
       const agg2 = await tx.movimientoFinanciero.aggregate({
         _sum: { deltaCaja: true },
         where: { registroCajaId: turno.id },
       });
-      const saldoFinal =
-        Number(turno.saldoInicial) + Number(agg2._sum.deltaCaja ?? 0);
+      const saldoFinal = round2(n(turno.saldoInicial) + n(agg2._sum.deltaCaja));
 
       const cerrado = await tx.registroCaja.update({
         where: { id: turno.id },
@@ -380,23 +396,29 @@ export class CajaService {
         },
       });
 
-      // Cambio de turno (sin depósito)
+      // 6) Cambio de turno (opcional). Arrastra el saldoFinal (puede ser negativo).
       let nuevoTurno: any = null;
       const abrir = modo === 'CAMBIO_TURNO' ? (abrirSiguiente ?? true) : false;
       if (abrir) {
         const nextUser = usuarioInicioSiguienteId ?? usuarioCierreId;
-        const nextFondo = fondoFijoSiguiente ?? Number(turno.fondoFijo ?? 0);
+        const nextFondo = n(fondoFijoSiguiente ?? turno.fondoFijo);
         nuevoTurno = await tx.registroCaja.create({
           data: {
             sucursalId: turno.sucursalId,
             usuarioInicioId: nextUser,
-            saldoInicial: saldoFinal, // arrastra el saldo que quedó
+            saldoInicial: saldoFinal, // arrastra lo que quedó (positivo o negativo)
             fondoFijo: nextFondo,
             comentario:
               comentarioAperturaSiguiente ?? 'Apertura por cambio de turno',
             estado: 'ABIERTO',
           },
         });
+      }
+
+      // 7) Retorno enriquecido (útil para UI/logs)
+      const warnings: string[] = [];
+      if (enCaja < 0) {
+        warnings.push('Saldo en caja negativo al momento del cierre.');
       }
 
       return {
@@ -408,6 +430,8 @@ export class CajaService {
         movimientoDeposito: movDeposito,
         nuevoTurno,
         enCajaAntes: enCaja,
+        enCajaOperable,
+        warnings,
       };
     });
   }
@@ -859,10 +883,13 @@ export class CajaService {
       }),
     ]);
 
-    const saldoInicial = Number(turno.saldoInicial ?? 0);
-    const fondoFijo = Number(turno.fondoFijo ?? 0);
-    const deltaCaja = Number(sumAll._sum.deltaCaja ?? 0);
-    const enCaja = saldoInicial + deltaCaja;
+    // const saldoInicial = Number(turno.saldoInicial ?? 0);
+    // const fondoFijo = Number(turno.fondoFijo ?? 0);
+    // const deltaCaja = Number(sumAll._sum.deltaCaja ?? 0);
+    // const enCaja = saldoInicial + deltaCaja;
+
+    const { saldoInicial, fondoFijo, enCaja, enCajaOperable, maxDeposito } =
+      await this.utilities.getCajaEstado(this.prisma, turno.id);
 
     const ingresosEfectivo = Number(sumIn._sum.deltaCaja ?? 0); // (>0)
     const egresosEfectivo = Math.abs(Number(sumOut._sum.deltaCaja ?? 0)); // mostrar en positivo
@@ -870,22 +897,37 @@ export class CajaService {
       Number(sumDepositosCierre._sum.deltaCaja ?? 0),
     ); // también positivo
 
-    const sugeridoDepositarAuto = Math.max(0, enCaja - fondoFijo);
-    const puedeDepositarHasta = Math.max(0, enCaja);
+    //nuevos
+    const enCajaReal = enCaja;
+    // const enCajaOperable = Math.max(0, enCajaReal);
+
+    // sugerencias y límites
+    const sugeridoDepositarAuto = Math.max(0, enCajaReal - fondoFijo);
+    const puedeDepositarHasta = enCajaOperable;
+
+    // Opcional: redondeo a 2 decimales si lo usas
+    const round2 = (n: number) => Math.round(n * 100) / 100;
 
     return {
       registroCajaId: turno.id,
       sucursalId: turno.sucursalId,
       saldoInicial,
-      enCaja,
+      enCaja: round2(enCajaReal),
+      enCajaOperable: round2(enCajaOperable), // << NUEVO
       fondoFijoActual: fondoFijo,
-      sugeridoDepositarAuto,
-      puedeDepositarHasta,
+      sugeridoDepositarAuto: round2(sugeridoDepositarAuto),
+      puedeDepositarHasta: round2(puedeDepositarHasta),
       desglose: {
-        ingresosEfectivo, // suma de deltaCaja > 0
-        egresosEfectivo, // suma abs(deltaCaja < 0)
-        depositosCierre, // suma abs de depósitos de cierre
+        ingresosEfectivo,
+        egresosEfectivo,
+        depositosCierre,
       },
+      warnings:
+        enCajaReal < 0
+          ? [
+              'El saldo en caja es negativo. Revise los movimientos financieros o registre un ajuste (ingreso o sobrante) antes de cerrar la caja.',
+            ]
+          : [],
       timestamp: new Date().toISOString(),
     };
   }
@@ -894,7 +936,10 @@ export class CajaService {
     // await this.prisma.movimientoCaja.deleteMany({});
     await this.prisma.sucursalSaldoDiario.deleteMany({});
     await this.prisma.saldoGlobalDiario.deleteMany({});
+    await this.prisma.movimientoFinanciero.deleteMany({});
 
+    await this.prisma.sucursalSaldoDiario.deleteMany({});
+    await this.prisma.saldoGlobalDiario.deleteMany({});
     return this.prisma.registroCaja.deleteMany({});
   }
 
@@ -1335,5 +1380,48 @@ export class CajaService {
     }
 
     return { ventaId: venta.id, registroCajaId };
+  }
+
+  //GET DE CAJAS ABIERTAS
+  async getCajasAbiertasToCompra(sucursalId: number) {
+    try {
+      const cajasAptas = await this.prisma.registroCaja.findMany({
+        where: {
+          estado: 'ABIERTO',
+          depositado: false,
+          fechaCierre: null,
+        },
+        select: {
+          id: true,
+          fechaApertura: true,
+          estado: true,
+          actualizadoEn: true,
+          saldoInicial: true,
+          usuarioInicioId: true,
+        },
+      });
+
+      const cajasCompletas = await Promise.all(
+        cajasAptas.map(async (caja) => {
+          const data = {
+            registroCaja: caja.id,
+            sucursalId,
+            userId: caja.usuarioInicioId,
+          };
+
+          const saldosCaja = await this.previewCierre(data);
+          return {
+            ...caja,
+            disponibleEnCaja: saldosCaja.enCajaOperable,
+          };
+        }),
+      );
+
+      return cajasCompletas;
+    } catch (error) {
+      this.logger.error('El error es: ', error);
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException('Fatal Error: Error inesperado');
+    }
   }
 }
