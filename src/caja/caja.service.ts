@@ -30,6 +30,7 @@ import { CerrarCajaV2Dto } from './cerrarCajaTypes';
 import { GetCajasQueryDto } from './GetCajasQueryDto ';
 import { UtilitiesService } from 'src/utilities/utilities.service';
 import { getCajasToCompraDto } from './getCajasToCompra.dto';
+import { TZGT } from 'src/utils/utils';
 dayjs.extend(utc);
 dayjs.extend(timezone);
 dayjs.extend(isSameOrBefore);
@@ -286,6 +287,7 @@ export class CajaService {
   }
 
   async cerrarCajaV2(dto: CerrarCajaV2Dto) {
+    const fechaCorte = dayjs().tz(TZGT).toDate();
     const {
       registroCajaId,
       usuarioCierreId,
@@ -395,6 +397,9 @@ export class CajaService {
           depositado: deposito > 0,
         },
       });
+
+      await this.upsertSucursalSnapshot(tx, turno.sucursalId, fechaCorte);
+      await this.refreshGlobalSnapshot(tx, fechaCorte);
 
       // 6) Cambio de turno (opcional). Arrastra el saldoFinal (puede ser negativo).
       let nuevoTurno: any = null;
@@ -1423,5 +1428,148 @@ export class CajaService {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException('Fatal Error: Error inesperado');
     }
+  }
+
+  //SNAPSHOOTS Y HELPERS
+  /**
+   * Calcula y guarda el snapshot diario (Caja/Banco) de una sucursal para la fecha dada.
+   * Debe llamarse DENTRO de la misma $transaction del cierre de caja.
+   */
+  async upsertSucursalSnapshot(
+    tx: PrismaService['$transaction']['arguments'][0],
+    sucursalId: number,
+    fechaRef?: Date, // si no se pasa, usa "ahora"
+  ) {
+    const hoy = dayjs(fechaRef ?? new Date()).tz(TZGT);
+    const fechaCorte = hoy.startOf('day').toDate(); // normaliza a 00:00 GT
+    const dayStart = hoy.startOf('day').toDate();
+    const dayEnd = hoy.endOf('day').toDate();
+
+    // Sumatorias del día por deltaCaja/deltaBanco
+    const [aggCajaIn, aggCajaOut, aggBanIn, aggBanOut] = await Promise.all([
+      tx.movimientoFinanciero.aggregate({
+        _sum: { deltaCaja: true },
+        where: {
+          sucursalId,
+          fecha: { gte: dayStart, lte: dayEnd },
+          deltaCaja: { gt: 0 },
+        },
+      }),
+      tx.movimientoFinanciero.aggregate({
+        _sum: { deltaCaja: true },
+        where: {
+          sucursalId,
+          fecha: { gte: dayStart, lte: dayEnd },
+          deltaCaja: { lt: 0 },
+        },
+      }),
+      tx.movimientoFinanciero.aggregate({
+        _sum: { deltaBanco: true },
+        where: {
+          sucursalId,
+          fecha: { gte: dayStart, lte: dayEnd },
+          deltaBanco: { gt: 0 },
+        },
+      }),
+      tx.movimientoFinanciero.aggregate({
+        _sum: { deltaBanco: true },
+        where: {
+          sucursalId,
+          fecha: { gte: dayStart, lte: dayEnd },
+          deltaBanco: { lt: 0 },
+        },
+      }),
+    ]);
+
+    // Snapshot previo (día anterior) => saldos de inicio
+    const snapPrev = await tx.sucursalSaldoDiario.findFirst({
+      where: { sucursalId, fecha: { lt: fechaCorte } },
+      orderBy: { fecha: 'desc' },
+      select: { saldoFinalCaja: true, saldoFinalBanco: true },
+    });
+
+    const saldoInicioCaja = Number(snapPrev?.saldoFinalCaja ?? 0);
+    const ingresosCaja = Number(aggCajaIn._sum.deltaCaja ?? 0);
+    const egresosCajaAbs = Math.abs(Number(aggCajaOut._sum.deltaCaja ?? 0));
+    const saldoFinalCaja = saldoInicioCaja + ingresosCaja - egresosCajaAbs;
+
+    const saldoInicioBanco = Number(snapPrev?.saldoFinalBanco ?? 0);
+    const ingresosBanco = Number(aggBanIn._sum.deltaBanco ?? 0);
+    const egresosBancoAbs = Math.abs(Number(aggBanOut._sum.deltaBanco ?? 0));
+    const saldoFinalBanco = saldoInicioBanco + ingresosBanco - egresosBancoAbs;
+
+    // UPSERT del snapshot de HOY
+    await tx.sucursalSaldoDiario.upsert({
+      where: { sucursalId_fecha: { sucursalId, fecha: fechaCorte } },
+      create: {
+        sucursalId,
+        fecha: fechaCorte,
+        saldoInicioCaja,
+        ingresosCaja,
+        egresosCaja: egresosCajaAbs,
+        saldoFinalCaja,
+        saldoInicioBanco,
+        ingresosBanco,
+        egresosBanco: egresosBancoAbs,
+        saldoFinalBanco,
+      },
+      update: {
+        saldoInicioCaja,
+        ingresosCaja,
+        egresosCaja: egresosCajaAbs,
+        saldoFinalCaja,
+        saldoInicioBanco,
+        ingresosBanco,
+        egresosBanco: egresosBancoAbs,
+        saldoFinalBanco,
+      },
+    });
+  }
+
+  /**
+   * Recalcula el global del día desde todos los snapshots por sucursal.
+   * También debe llamarse dentro de la MISMA $transaction que el cierre.
+   */
+  async refreshGlobalSnapshot(
+    tx: PrismaService['$transaction']['arguments'][0],
+    fechaRef?: Date,
+  ) {
+    const fechaCorte = dayjs(fechaRef ?? new Date())
+      .tz(TZGT)
+      .startOf('day')
+      .toDate();
+
+    const sum = await tx.sucursalSaldoDiario.aggregate({
+      where: { fecha: fechaCorte },
+      _sum: {
+        saldoFinalCaja: true,
+        ingresosCaja: true,
+        egresosCaja: true,
+        saldoFinalBanco: true,
+        ingresosBanco: true,
+        egresosBanco: true,
+      },
+    });
+
+    await tx.saldoGlobalDiario.upsert({
+      where: { fecha: fechaCorte },
+      create: {
+        fecha: fechaCorte,
+        saldoTotalCaja: Number(sum._sum.saldoFinalCaja ?? 0),
+        ingresosTotalCaja: Number(sum._sum.ingresosCaja ?? 0),
+        egresosTotalCaja: Number(sum._sum.egresosCaja ?? 0),
+        saldoTotalBanco: Number(sum._sum.saldoFinalBanco ?? 0),
+        ingresosTotalBanco: Number(sum._sum.ingresosBanco ?? 0),
+        egresosTotalBanco: Number(sum._sum.egresosBanco ?? 0),
+      },
+      update: {
+        saldoTotalCaja: Number(sum._sum.saldoFinalCaja ?? 0),
+        ingresosTotalCaja: Number(sum._sum.ingresosCaja ?? 0),
+        egresosTotalCaja: Number(sum._sum.egresosCaja ?? 0),
+        saldoTotalBanco: Number(sum._sum.saldoFinalBanco ?? 0),
+        ingresosTotalBanco: Number(sum._sum.ingresosBanco ?? 0),
+        egresosTotalBanco: Number(sum._sum.egresosBanco ?? 0),
+      },
+    });
   }
 }

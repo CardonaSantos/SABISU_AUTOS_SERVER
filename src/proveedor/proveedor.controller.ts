@@ -31,6 +31,11 @@ export class ProveedorController {
     return await this.proveedorService.findAllSimpleProveedor();
   }
 
+  @Get('/get-proveedores-hook')
+  async getProveedores() {
+    return await this.proveedorService.getProveedoresHook();
+  }
+
   @Get('/get-complete-providers')
   async finAllCompleteProvider() {
     return await this.proveedorService.findCompleteProvider();

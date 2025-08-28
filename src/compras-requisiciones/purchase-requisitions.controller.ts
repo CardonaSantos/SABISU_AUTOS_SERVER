@@ -22,6 +22,11 @@ export class PurchaseRequisitionsController {
     private readonly purchaseRequisitionsService: PurchaseRequisitionsService,
   ) {}
 
+  /**
+   * Generar la compra a partir de una Requisicion
+   * @param createPurchaseRequisitionDto DTO
+   * @returns
+   */
   @Post('generar-compra')
   generateCompraFromRequisicion(
     @Body() createPurchaseRequisitionDto: CreatePurchaseRequisitionDto,

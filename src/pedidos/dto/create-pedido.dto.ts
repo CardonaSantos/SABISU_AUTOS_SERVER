@@ -12,7 +12,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
-import { PedidoEstado } from '@prisma/client';
+import { PedidoEstado, PedidoPrioridad, TipoPedido } from '@prisma/client';
 import { CreatePedidoLineaDto } from './create-pedido-linea';
 
 /**
@@ -64,4 +64,10 @@ export class CreatePedidoDto {
   @Type(() => Number)
   @Min(1)
   compraId?: number;
+
+  @IsEnum(PedidoPrioridad)
+  prioridad: PedidoPrioridad;
+
+  @IsEnum(TipoPedido)
+  tipo: TipoPedido;
 }

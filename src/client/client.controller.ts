@@ -37,6 +37,11 @@ export class ClientController {
     return this.clientService.getClientToCredit();
   }
 
+  @Get('/clientes-to-select')
+  getClientesToSelect() {
+    return this.clientService.getClientesToSelect();
+  }
+
   @Patch(':id')
   update(
     @Param('id', ParseIntPipe) id: number,

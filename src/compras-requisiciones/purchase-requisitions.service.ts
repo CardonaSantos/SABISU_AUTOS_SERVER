@@ -174,6 +174,13 @@ export class PurchaseRequisitionsService {
         fecha: true,
         proveedor: { select: { id: true, nombre: true } },
         usuario: { select: { id: true, nombre: true, correo: true } },
+        pedido: {
+          select: {
+            id: true,
+            folio: true,
+          },
+        },
+
         requisicion: {
           select: {
             id: true,
@@ -225,6 +232,13 @@ export class PurchaseRequisitionsService {
 
       // ---- Mapping seguro para UI
       const items = compras.map((c) => {
+        const folioOrigen = c.requisicion?.folio ?? c.pedido?.folio ?? null;
+        const tipoOrigen = c.requisicion
+          ? 'REQUISICION'
+          : c.pedido
+            ? 'PEDIDO'
+            : 'DIRECTA';
+
         const detalles = (
           withDetalles ? ((c as any).detalles ?? []) : []
         ) as Array<{
@@ -276,6 +290,10 @@ export class PurchaseRequisitionsService {
           estado: c.estado ?? 'ESPERANDO_ENTREGA',
           total: c.total ?? resumen.subtotal,
           fecha: (c.fecha as any)?.toISOString?.() ?? null,
+
+          folioOrigen, // NUEVO
+          tipoOrigen, // NUEVO
+
           conFactura: !!c.conFactura,
           proveedor: c.proveedor
             ? { id: c.proveedor.id, nombre: c.proveedor.nombre }
@@ -291,10 +309,16 @@ export class PurchaseRequisitionsService {
             nombre: c.usuario?.nombre ?? '',
             correo: c.usuario?.correo ?? '',
           },
+          pedido: c.pedido
+            ? {
+                id: c.pedido.id,
+                folio: c.pedido.folio,
+              }
+            : {},
           requisicion: c.requisicion
             ? {
                 id: c.requisicion.id,
-                folio: c.requisicion.folio ?? '',
+                folio: c.requisicion.folio ?? c.pedido?.folio,
                 estado: c.requisicion.estado ?? 'PENDIENTE',
                 fecha: (c.requisicion.fecha as any)?.toISOString?.() ?? null,
                 totalLineas: c.requisicion.totalLineas ?? 0,
@@ -312,6 +336,7 @@ export class PurchaseRequisitionsService {
           creadoEn: (c.creadoEn as any)?.toISOString?.() ?? null,
           actualizadoEn: (c.actualizadoEn as any)?.toISOString?.() ?? null,
           detalles: detallesUI,
+
           resumen,
         };
       });
@@ -393,6 +418,19 @@ export class PurchaseRequisitionsService {
               usuario: { select: { id: true, nombre: true, correo: true } },
             },
           },
+          pedido: {
+            select: {
+              id: true,
+              folio: true,
+              fecha: true,
+              estado: true,
+              prioridad: true,
+              tipo: true,
+              observaciones: true,
+              usuario: { select: { id: true, nombre: true, correo: true } },
+              cliente: { select: { id: true, nombre: true } },
+            },
+          },
           detalles: {
             orderBy: { cantidad: 'desc' },
             select: {
@@ -460,6 +498,10 @@ export class PurchaseRequisitionsService {
               fecha: (c.facturaFecha as any)?.toISOString?.() ?? null,
             }
           : null,
+
+        origen: c.origen, // 👈 tomado de DB
+        folioOrigen: c.requisicion?.folio ?? c.pedido?.folio ?? null, // 👈 dinámico
+
         proveedor: c.proveedor
           ? { id: c.proveedor.id, nombre: c.proveedor.nombre }
           : null,
@@ -471,6 +513,7 @@ export class PurchaseRequisitionsService {
           nombre: c.usuario?.nombre ?? '',
           correo: c.usuario?.correo ?? '',
         },
+
         requisicion: c.requisicion
           ? {
               id: c.requisicion.id,
@@ -489,6 +532,28 @@ export class PurchaseRequisitionsService {
               },
             }
           : null,
+
+        pedido:
+          !c.requisicion && c.pedido // 👈 solo si NO hay requisición
+            ? {
+                id: c.pedido.id,
+                folio: c.pedido.folio,
+                estado: c.pedido.estado,
+                fecha: (c.pedido.fecha as any)?.toISOString?.() ?? null,
+                prioridad: c.pedido.prioridad,
+                tipo: c.pedido.tipo,
+                observaciones: c.pedido.observaciones ?? '',
+                usuario: {
+                  id: c.pedido.usuario?.id ?? null,
+                  nombre: c.pedido.usuario?.nombre ?? '',
+                  correo: c.pedido.usuario?.correo ?? '',
+                },
+                cliente: c.pedido.cliente
+                  ? { id: c.pedido.cliente.id, nombre: c.pedido.cliente.nombre }
+                  : null,
+              }
+            : null,
+
         creadoEn: (c.creadoEn as any)?.toISOString?.() ?? null,
         actualizadoEn: (c.actualizadoEn as any)?.toISOString?.() ?? null,
         detalles,
@@ -914,6 +979,9 @@ export class PurchaseRequisitionsService {
   async makeRecepcionCompraAuto(dto: RecepcionarCompraAutoDto) {
     try {
       this.logger.log('La data llegando es: ', dto);
+      const { cuentaBancariaId } = dto;
+      console.log('la cuenta es_:', cuentaBancariaId);
+
       return await this.prisma.$transaction(async (tx) => {
         const compra = await tx.compra.findUnique({
           where: { id: dto.compraId },
@@ -928,6 +996,14 @@ export class PurchaseRequisitionsService {
               },
             },
             proveedor: { select: { id: true } },
+            pedido: {
+              select: {
+                id: true,
+                estado: true,
+                folio: true,
+                tipo: true,
+              },
+            },
           },
         });
         if (!compra) throw new NotFoundException('Compra no encontrada');
@@ -938,7 +1014,7 @@ export class PurchaseRequisitionsService {
             'La compra no tiene sucursal asociada.',
           );
         }
-        const proveedorIdEfectivo = compra.proveedorId ?? undefined;
+        // const proveedorIdEfectivo = compra.proveedorId ?? undefined;
 
         // 1) Si hay requisición, crear la recepción (igual que antes)
         let requisicionRecepcionId: number | null = null;
@@ -1101,10 +1177,9 @@ export class PurchaseRequisitionsService {
         if (entregaId) {
           const trackers = lineasRecep.map((l) => ({
             productoId: l.productoId,
-            cantidadVendida: l.cantidadRecibida, // recibido = “vendida” para el tracker
+            cantidadVendida: l.cantidadRecibida, // recibido = “vendida” en tu tracker
             cantidadAnterior: cantidadesAnteriores[l.productoId] ?? 0,
           }));
-
           await this.tracker.trackeEntregaStock(
             tx,
             trackers,
@@ -1112,12 +1187,11 @@ export class PurchaseRequisitionsService {
             dto.usuarioId,
             entregaId,
             'ENTREGA_STOCK',
-            'Recepción TOTAL automática desde modúlo COMPRA',
+            `Recepción TOTAL automática desde módulo COMPRA (origen: ${compra.origen})`,
           );
         } else {
-          // No abortamos la transacción (mantenemos comportamiento), pero lo registramos
           this.logger.warn(
-            '[makeRecepcionCompraAuto] No se pudo resolver entregaId para tracking; se omitió trackeEntregaStock.',
+            '[makeRecepcionCompraAuto] No se pudo resolver entregaId para tracking.',
           );
         }
 
@@ -1142,6 +1216,14 @@ export class PurchaseRequisitionsService {
           }
         }
 
+        // 👇 NUEVO: si provino de PEDIDO, lo marcamos como RECIBIDO
+        if (compra.pedido?.id) {
+          await tx.pedido.update({
+            where: { id: compra.pedido.id },
+            data: { estado: 'RECIBIDO' },
+          });
+        }
+
         // 9) Estado de compra (igual que antes)
         const estadoCompra =
           recibidoEnEsta >= solicitadoTotal ? 'RECIBIDO' : 'RECIBIDO_PARCIAL';
@@ -1151,7 +1233,9 @@ export class PurchaseRequisitionsService {
           data: {
             estado: estadoCompra,
             ingresadaAStock: true,
-            cantidadRecibidaAcumulada: compra.detalles.length,
+            // cantidadRecibidaAcumulada: compra.detalles.length,
+            cantidadRecibidaAcumulada:
+              (compra.cantidadRecibidaAcumulada ?? 0) + recibidoEnEsta,
           },
         });
 
@@ -1310,7 +1394,8 @@ export class PurchaseRequisitionsService {
   ) {
     try {
       this.logger.log('La data del envio es: ', createPurchaseRequisitionDto);
-      const { requisicionID, userID } = createPurchaseRequisitionDto;
+      const { requisicionID, userID, proveedorId } =
+        createPurchaseRequisitionDto;
       return await this.prisma.$transaction(async (tx) => {
         const existing = await tx.compra.findFirst({
           where: { requisicionId: requisicionID },
@@ -1318,7 +1403,6 @@ export class PurchaseRequisitionsService {
         });
         if (existing) {
           throw new BadRequestException('La requisición ya tiene una compra');
-          return existing;
         }
 
         const req = await tx.requisicion.findUniqueOrThrow({
@@ -1384,7 +1468,15 @@ export class PurchaseRequisitionsService {
 
         await tx.compra.update({
           where: { id: compra.id },
-          data: { total },
+          data: {
+            total,
+            origen: 'REQUISICION',
+            proveedor: {
+              connect: {
+                id: proveedorId,
+              },
+            },
+          },
         });
 
         await tx.requisicion.update({

@@ -467,7 +467,13 @@ enum EstadoCompra {
   RECIBIDO_PARCIAL
   ESPERANDO_ENTREGA   // <— lo dejamos en el enum
 }
- 
+
+ enum OrigenCompra {
+  DIRECTA
+  REQUISICION
+  PEDIDO
+}
+
 model Compra {
   id           Int      @id @default(autoincrement())
   sucursalId   Int?   
@@ -492,6 +498,7 @@ model Compra {
   facturaNumero    String?     // p. ej. “F001-000123”
   facturaFecha     DateTime?   // si quieres guardar la fecha de emisión
   conFactura       Boolean     @default(false) // si solo te interesa saber si viene con factura
+  origen       OrigenCompra @default(DIRECTA)   // 👈 nuevo campo
 
   creadoEn        DateTime @default(now())
   actualizadoEn   DateTime @updatedAt
@@ -504,6 +511,7 @@ enum PedidoEstado {
   RECIBIDO         // los artículos llegaron y se ingresaron a stock o se entregaron
   CANCELADO        // el cliente anuló o no se completó
 }
+
 
 /// Cabecera del pedido de cliente
 enum PedidoPrioridad {
@@ -524,8 +532,8 @@ enum TipoPedido {
     fecha          DateTime      @default(now())              
     sucursalId     Int                                             // en qué tienda/clientes se creó
     sucursal       Sucursal     @relation(fields: [sucursalId], references: [id])
-    clienteId      Int                                             // quien pide
-    cliente        Cliente      @relation(fields: [clienteId], references: [id])
+    clienteId      Int?                                             // quien pide
+    cliente        Cliente?      @relation(fields: [clienteId], references: [id])
     usuarioId      Int                                             // quién registró el pedido
     usuario        Usuario      @relation(fields: [usuarioId], references: [id])
     estado         PedidoEstado @default(PENDIENTE)
@@ -541,7 +549,6 @@ enum TipoPedido {
 
     tipo TipoPedido @default(INTERNO)
     prioridad PedidoPrioridad @default(MEDIA)
-
   }
 
 /// Cada línea de un pedido de cliente
@@ -1139,6 +1146,7 @@ model DepositoCobro {
 model Cliente {
   id              Int          @id @default(autoincrement())
   nombre          String
+  apellidos       String? 
   telefono        String?
   direccion       String?
   compras         Venta[]

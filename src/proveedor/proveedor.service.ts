@@ -1,6 +1,8 @@
 import {
+  HttpException,
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { CreateProveedorDto } from './dto/create-proveedor.dto';
@@ -9,6 +11,8 @@ import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
 export class ProveedorService {
+  private readonly logger = new Logger(ProveedorService.name);
+
   constructor(private readonly prisma: PrismaService) {}
   async create(createProveedorDto: CreateProveedorDto) {
     try {
@@ -71,6 +75,32 @@ export class ProveedorService {
       console.error(error);
       throw new InternalServerErrorException(
         'Error al obtener los proveedores',
+      );
+    }
+  }
+
+  async getProveedoresHook() {
+    try {
+      const proveedores = await this.prisma.proveedor.findMany({
+        select: {
+          id: true,
+          nombre: true,
+          telefono: true,
+          direccion: true,
+          activo: true,
+          actualizadoEn: true,
+          creadoEn: true,
+          notas: true,
+          telefonoContacto: true,
+        },
+      });
+
+      return proveedores;
+    } catch (error) {
+      this.logger.error('El error generado es: ', error);
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(
+        'Fatal error: Error inesperado en getProveedores hook',
       );
     }
   }

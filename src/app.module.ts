@@ -59,6 +59,7 @@ import { CuentasBancariasModule } from './cuentas-bancarias/cuentas-bancarias.mo
 import { ResumenesAdminModule } from './resumenes-admin/resumenes-admin.module';
 import { CronSnapshootModule } from './cron-snapshoot/cron-snapshoot.module';
 import { SaldosServiceService } from './crion-snapshoot/saldos-service/saldos-service.service';
+import { CajaAdministrativoModule } from './caja-administrativo/caja-administrativo.module';
 
 @Module({
   imports: [
@@ -120,6 +121,7 @@ import { SaldosServiceService } from './crion-snapshoot/saldos-service/saldos-se
     CuentasBancariasModule,
     ResumenesAdminModule,
     CronSnapshootModule,
+    CajaAdministrativoModule,
   ],
   controllers: [AppController],
   providers: [AppService, CloudinaryProvider, SaldosServiceService],
