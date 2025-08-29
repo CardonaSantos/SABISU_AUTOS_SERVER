@@ -21,6 +21,12 @@ export class ResumenesAdminController {
   @Post()
   create(@Body() createResumenesAdminDto: CreateResumenesAdminDto) {}
 
+  /**
+   * Para resumen diario y ver cuadres coherentes de cajas
+   * @param sucursalId
+   * @param date
+   * @returns
+   */
   // dashboard.controller.ts
   @Get('admin/resumen-diario')
   async getResumenDiario(

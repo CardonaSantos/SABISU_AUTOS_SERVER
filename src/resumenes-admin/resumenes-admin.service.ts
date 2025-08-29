@@ -9,9 +9,30 @@ import { UpdateResumenesAdminDto } from './dto/update-resumenes-admin.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { transformAuthInfo } from 'passport';
 import { dayBounds, n } from 'src/cron-snapshoot/helpers';
+import * as dayjs from 'dayjs';
+import 'dayjs/locale/es';
+import * as utc from 'dayjs/plugin/utc';
+import * as timezone from 'dayjs/plugin/timezone';
+import * as isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
+import * as isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
+import { TZGT } from 'src/utils/utils';
+import { ResumenDiarioAdminResponse } from './interfaces';
+dayjs.extend(utc);
+dayjs.extend(timezone);
+dayjs.extend(isSameOrBefore);
+dayjs.extend(isSameOrAfter);
+dayjs.locale('es');
+
 const num = (v: any) => Number(v ?? 0);
 type DayWindow = { inicio: Date; fin: Date; dayStr: string };
-
+const CASH_METHODS = ['EFECTIVO', 'CONTADO', 'CASH', 'CHEQUE']; // ajusta a tu catálogo
+function N(v: any): number {
+  if (v == null) return 0;
+  if (typeof v === 'number') return v;
+  if (typeof (v as any).toString === 'function')
+    return Number((v as any).toString());
+  return Number(v) || 0;
+}
 @Injectable()
 export class ResumenesAdminService {
   private readonly UMBRAL_DESCUADRE = 0.01;
@@ -81,19 +102,18 @@ export class ResumenesAdminService {
     }
   }
 
-  async resumenDiarioAdmin(sucursalId: number, dateISO: string) {
-    this.logger.log('Solicitando con: ', sucursalId);
-    this.logger.log('El ISOString es: ', dateISO);
+  async resumenDiarioAdmin(
+    sucursalId: number,
+    dateISO: string,
+  ): Promise<ResumenDiarioAdminResponse> {
+    // 1) Día TZ GT [00:00, 23:59:59]
+    const day = dayjs.tz(dateISO.slice(0, 10), 'YYYY-MM-DD', TZGT);
+    const inicio = day.startOf('day').toDate();
+    const fin = day.endOf('day').toDate();
 
-    const dayStr = dateISO.slice(0, 10) ?? new Date(); // "YYYY-MM-DD"
-    const inicio = new Date(`${dayStr}T00:00:00-06:00`); // GT -06:00
-    const fin = new Date(`${dayStr}T00:00:00-06:00`);
-    fin.setDate(fin.getDate() + 1);
+    const whereMov = { sucursalId, fecha: { gte: inicio, lte: fin } } as const;
 
-    // const whereMov = { sucursalId, fecha: { gte: inicio, lt: fin } } as const;
-    const whereMov = { sucursalId, fecha: { gte: inicio, lt: fin } } as const;
-
-    // 1) Caja y Banco (entradas / salidas)
+    // 2) Sumatorias por canal (signo separado)
     const [cajaIn, cajaOut, banIn, banOut] = await Promise.all([
       this.prisma.movimientoFinanciero.aggregate({
         _sum: { deltaCaja: true },
@@ -113,71 +133,62 @@ export class ResumenesAdminService {
       }),
     ]);
 
-    const ingresosCaja = num(cajaIn._sum.deltaCaja);
-    const egresosCaja = Math.abs(num(cajaOut._sum.deltaCaja));
-    const ingresosBanco = num(banIn._sum.deltaBanco);
-    const egresosBanco = Math.abs(num(banOut._sum.deltaBanco));
+    const ingresosCaja = N(cajaIn._sum.deltaCaja);
+    const egresosCaja = Math.abs(N(cajaOut._sum.deltaCaja));
+    const ingresosBanco = N(banIn._sum.deltaBanco);
+    const egresosBanco = Math.abs(N(banOut._sum.deltaBanco));
 
-    // 2) Saldos de inicio (snapshots del día anterior)
-    // const snapPrev = await this.prisma.sucursalSaldoDiario.findFirst({
-    //   where: { sucursalId, fecha: { lt: inicio } },
-    //   orderBy: { fecha: 'desc' },
-    //   select: { saldoFinalCaja: true, saldoFinalBanco: true },
-    // });
+    // 3) Snapshot previo + apertura del día
+    const [snapPrev, apertura] = await Promise.all([
+      this.prisma.sucursalSaldoDiario.findFirst({
+        where: { sucursalId, fecha: { lt: inicio } },
+        orderBy: { fecha: 'desc' },
+        select: { saldoFinalCaja: true, saldoFinalBanco: true },
+      }),
+      this.prisma.registroCaja.findFirst({
+        where: { sucursalId, fechaApertura: { gte: inicio, lte: fin } },
+        orderBy: { fechaApertura: 'asc' },
+        select: { saldoInicial: true },
+      }),
+    ]);
 
-    const snapPrev = await this.prisma.sucursalSaldoDiario.findFirst({
-      where: { sucursalId, fecha: { lt: inicio } },
-      orderBy: { fecha: 'desc' },
-      select: { saldoFinalCaja: true, saldoFinalBanco: true },
-    });
-
-    //     const primeraApertura = await this.prisma.registroCaja.findFirst({
-    //   where: { sucursalId, fechaApertura: { gte: inicio, lt: fin } },
-    //   orderBy: { fechaCierre: 'asc' },
-    //   select: { saldoInicial: true },
-    // });
-
-    const primeraApertura = await this.prisma.registroCaja.findFirst({
-      where: { sucursalId, fechaApertura: { gte: inicio, lt: fin } },
-      orderBy: { fechaApertura: 'asc' }, // ✅ apertura, no cierre
-      select: { saldoInicial: true },
-    });
-
-    // const inicioCaja = primeraApertura ? Number(primeraApertura.saldoInicial ?? 0): snapPrev.saldoFinalBanco
-    // const inicioBanco = num(snapPrev?.saldoFinalBanco);
-    const inicioCaja = Number(
-      primeraApertura?.saldoInicial ?? snapPrev?.saldoFinalCaja ?? 0,
+    const inicioCaja = N(
+      apertura?.saldoInicial ?? snapPrev?.saldoFinalCaja ?? 0,
     );
+    const inicioBanco = N(snapPrev?.saldoFinalBanco ?? 0);
 
-    const inicioBanco = Number(snapPrev?.saldoFinalBanco ?? 0);
-
-    // 3) Ventas y métodos de pago
+    // 4) Ventas y métodos
     const [ventasAgg, pagosGroup] = await Promise.all([
       this.prisma.venta.aggregate({
-        where: { sucursalId, fechaVenta: { gte: inicio, lt: fin } },
+        where: { sucursalId, fechaVenta: { gte: inicio, lte: fin } },
         _sum: { totalVenta: true },
         _count: { _all: true },
       }),
       this.prisma.pago.groupBy({
         by: ['metodoPago'],
         where: {
-          venta: { is: { sucursalId, fechaVenta: { gte: inicio, lt: fin } } },
+          venta: { is: { sucursalId, fechaVenta: { gte: inicio, lte: fin } } },
         },
         _sum: { monto: true },
       }),
     ]);
 
-    const ventasTotal = num(ventasAgg._sum.totalVenta);
-    const ventasCantidad = num(ventasAgg._count._all);
+    const ventasTotal = N(ventasAgg._sum.totalVenta);
+    const ventasCantidad = N(ventasAgg._count._all);
     const ticketPromedio = ventasCantidad ? ventasTotal / ventasCantidad : 0;
 
     const porMetodo: Record<string, number> = {};
     for (const g of pagosGroup)
-      porMetodo[g.metodoPago as string] = num(g._sum.monto);
-    const efectivoVentas = this.calcularEfectivoDesdeMetodos(porMetodo);
+      porMetodo[g.metodoPago as string] = N(g._sum.monto);
 
-    // 4) Egresos (costos de venta / gastos operativos)
-    const [costosCaja, costosBanco, gastosCaja, gastosBanco] =
+    // Métodos que cuentan como "efectivo" (catálogo configurable)
+    const efectivoVentas = CASH_METHODS.reduce(
+      (acc, k) => acc + (porMetodo[k] ?? 0),
+      0,
+    );
+
+    // 5) Egresos operativos (COSTO_VENTA / GASTO_OPERATIVO) por canal
+    const [costosCajaAgg, costosBancoAgg, gastosCajaAgg, gastosBancoAgg] =
       await Promise.all([
         this.prisma.movimientoFinanciero.aggregate({
           _sum: { deltaCaja: true },
@@ -213,27 +224,19 @@ export class ResumenesAdminService {
         }),
       ]);
 
-    const costosVentaCaja = Math.abs(num(costosCaja._sum.deltaCaja));
-    const costosVentaBanco = Math.abs(num(costosBanco._sum.deltaBanco));
-    const costosVentaTotal = costosVentaCaja + costosVentaBanco;
+    const costosCaja = Math.abs(N(costosCajaAgg._sum.deltaCaja));
+    const costosBanco = Math.abs(N(costosBancoAgg._sum.deltaBanco));
+    const gastosCaja = Math.abs(N(gastosCajaAgg._sum.deltaCaja));
+    const gastosBanco = Math.abs(N(gastosBancoAgg._sum.deltaBanco));
 
-    const gastosOpCaja = Math.abs(num(gastosCaja._sum.deltaCaja));
-    const gastosOpBanco = Math.abs(num(gastosBanco._sum.deltaBanco));
-    const gastosOperativosTotal = gastosOpCaja + gastosOpBanco;
-
-    // Sub-desglose: pago a proveedor (va dentro de costos de venta)
-    // Nota: ajusta los motivos según tu enumeración real en DB
-    const motivoPagoProveedor = {
-      in: ['DEPOSITO_PROVEEDOR', 'PAGO_PROVEEDOR_BANCO'],
-    } as const;
-    const [pagoProvCajaAgg, pagoProvBanAgg] = await Promise.all([
+    // Sub-desglose: pagos a proveedor
+    const [provCajaAgg, provBancoAgg] = await Promise.all([
       this.prisma.movimientoFinanciero.aggregate({
         _sum: { deltaCaja: true },
         where: {
           ...whereMov,
-          motivo: {
-            in: ['DEPOSITO_PROVEEDOR', 'PAGO_PROVEEDOR_BANCO'],
-          },
+          clasificacion: 'COSTO_VENTA',
+          motivo: { in: ['DEPOSITO_PROVEEDOR', 'PAGO_PROVEEDOR_BANCO'] },
           deltaCaja: { lt: 0 },
         },
       }),
@@ -241,53 +244,52 @@ export class ResumenesAdminService {
         _sum: { deltaBanco: true },
         where: {
           ...whereMov,
-          motivo: {
-            in: ['DEPOSITO_PROVEEDOR', 'PAGO_PROVEEDOR_BANCO'],
-          },
+          clasificacion: 'COSTO_VENTA',
+          motivo: { in: ['DEPOSITO_PROVEEDOR', 'PAGO_PROVEEDOR_BANCO'] },
           deltaBanco: { lt: 0 },
         },
       }),
     ]);
-    const pagoProveedorCaja = Math.abs(num(pagoProvCajaAgg._sum.deltaCaja));
-    const pagoProveedorBanco = Math.abs(num(pagoProvBanAgg._sum.deltaBanco));
+    const pagoProvCaja = Math.abs(N(provCajaAgg._sum.deltaCaja));
+    const pagoProvBanco = Math.abs(N(provBancoAgg._sum.deltaBanco));
 
-    // 5) Depósitos SOLO de cierre (ingresan a TU banco)
-    const depositoCierreWhereBanco = {
-      ...whereMov,
-      motivo: 'DEPOSITO_CIERRE',
-      deltaBanco: { gt: 0 },
-    } as const;
-    const depositoCierreWhereCaja = {
-      ...whereMov,
-      motivo: 'DEPOSITO_CIERRE',
-      deltaCaja: { lt: 0 },
-    } as const;
-
-    const [depCount, depSumBanco, depSumCajaAbs, depPorCuenta] =
-      await Promise.all([
+    // 6) Depósitos de CIERRE (Caja→Banco)
+    const [depCount, depSumBanco, depSumCaja, depPorCuenta] = await Promise.all(
+      [
         this.prisma.movimientoFinanciero.count({
           where: { ...whereMov, motivo: 'DEPOSITO_CIERRE' },
         }),
         this.prisma.movimientoFinanciero.aggregate({
           _sum: { deltaBanco: true },
-          where: depositoCierreWhereBanco,
+          where: {
+            ...whereMov,
+            motivo: 'DEPOSITO_CIERRE',
+            deltaBanco: { gt: 0 },
+          },
         }),
         this.prisma.movimientoFinanciero.aggregate({
           _sum: { deltaCaja: true },
-          where: depositoCierreWhereCaja,
+          where: {
+            ...whereMov,
+            motivo: 'DEPOSITO_CIERRE',
+            deltaCaja: { lt: 0 },
+          },
         }),
         this.prisma.movimientoFinanciero.groupBy({
           by: ['cuentaBancariaId'],
-          where: depositoCierreWhereBanco,
+          where: {
+            ...whereMov,
+            motivo: 'DEPOSITO_CIERRE',
+            deltaBanco: { gt: 0 },
+          },
           _sum: { deltaBanco: true },
           _count: { _all: true },
         }),
-      ]);
+      ],
+    );
 
-    const depositosTotalMontoBanco = num(depSumBanco._sum.deltaBanco);
-    const egresoCajaPorCierre = Math.abs(num(depSumCajaAbs._sum.deltaCaja)); // para comparativos
-
-    // Enriquecer porCuenta con datos de la cuenta
+    const depositoCierreBanco = N(depSumBanco._sum.deltaBanco); // +++
+    const depositoCierreCaja = Math.abs(N(depSumCaja._sum.deltaCaja)); // ---
     const cuentaIds = depPorCuenta
       .map((d) => d.cuentaBancariaId)
       .filter(Boolean) as number[];
@@ -297,59 +299,109 @@ export class ResumenesAdminService {
           select: { id: true, banco: true, alias: true, numero: true },
         })
       : [];
-
-    const depositosPorCuenta = depPorCuenta.map((d) => {
-      const cta = cuentas.find((c) => c.id === d.cuentaBancariaId);
-      const numeroMasked = cta?.numero ? `****${cta.numero.slice(-4)}` : null;
+    const porCuenta = depPorCuenta.map((d) => {
+      const c = cuentas.find((x) => x.id === d.cuentaBancariaId);
       return {
         cuentaBancariaId: d.cuentaBancariaId!,
-        banco: cta?.banco ?? '—',
-        alias: cta?.alias ?? null,
-        numeroMasked,
-        monto: num(d._sum.deltaBanco),
-        cantidad: num(d._count?._all),
+        banco: c?.banco ?? '—',
+        alias: c?.alias ?? null,
+        numeroMasked: c?.numero ? `****${c.numero.slice(-4)}` : null,
+        monto: N(d._sum.deltaBanco),
+        cantidad: N(d._count._all),
       };
     });
 
-    // 6) Comparativos (cuadre rápido caja vs ventas en efectivo)
-    const netoCajaOperativo =
-      ingresosCaja - (egresosCaja - egresoCajaPorCierre);
-    const variacionCajaVsVentasEfectivo = netoCajaOperativo - efectivoVentas;
-    const alertas: string[] = [];
-    const UMBRAL_DESCUADRE = 0.01; // ajustable (en moneda, o podrías usar % sobre ventas)
-    if (Math.abs(variacionCajaVsVentasEfectivo) > UMBRAL_DESCUADRE) {
-      alertas.push('Descuadre caja vs ventas en efectivo');
+    // (Opcional) Banco→Caja del día
+    const bancoACajaAgg = await this.prisma.movimientoFinanciero.aggregate({
+      _sum: { deltaCaja: true },
+      where: {
+        ...whereMov,
+        clasificacion: 'TRANSFERENCIA',
+        deltaCaja: { gt: 0 },
+        deltaBanco: { lt: 0 },
+      },
+    });
+    const bancoACaja = N(bancoACajaAgg._sum.deltaCaja);
+
+    // 7) Cálculos de saldos y cuadres
+    const finalFisicoCaja = inicioCaja + ingresosCaja - egresosCaja;
+    const egresosSinCierre = egresosCaja - depositoCierreCaja;
+    const finalOperativoCaja = inicioCaja + ingresosCaja - egresosSinCierre;
+
+    const cajaDisponible = inicioCaja + ingresosCaja - egresosSinCierre; // antes de depositar
+    const depositoMayorADisponible = depositoCierreCaja > cajaDisponible;
+
+    const finalBanco = inicioBanco + ingresosBanco - egresosBanco;
+
+    const identidadCajaOk =
+      Math.abs(finalFisicoCaja - (inicioCaja + ingresosCaja - egresosCaja)) <
+      0.001;
+    const identidadBancoOk =
+      Math.abs(finalBanco - (inicioBanco + ingresosBanco - egresosBanco)) <
+      0.001;
+
+    // 7.1) Ingresos de Caja POR VENTAS (para cuadre de ventas)
+    const ingCajaVentasAgg = await this.prisma.movimientoFinanciero.aggregate({
+      _sum: { deltaCaja: true },
+      where: {
+        ...whereMov,
+        clasificacion: 'INGRESO',
+        motivo: 'VENTA',
+        deltaCaja: { gt: 0 },
+      },
+    });
+    let ingresosCajaPorVentas = Math.abs(N(ingCajaVentasAgg._sum.deltaCaja));
+    let ingresosCajaPorVentasEstimado = false;
+
+    // Fallback: si no registras MF de ventas y sí hay pagos en efectivo,
+    // asumimos ingresosCajaPorVentas = efectivoVentas (no duplica si luego registras MF)
+    if (ingresosCajaPorVentas === 0 && efectivoVentas > 0) {
+      ingresosCajaPorVentas = efectivoVentas;
+      ingresosCajaPorVentasEstimado = true;
     }
 
-    // 7) Cierre/Arrastre
-    const huboCierre = depCount > 0;
+    // 7.2) Comparativos
+    const netoCajaOperativo = ingresosCaja - egresosSinCierre; // informativo
+    const variacionVsEfectivo = netoCajaOperativo - efectivoVentas; // informativo
 
-    const cajaFinal =
-      inicioCaja + ingresosCaja - (egresosCaja - egresoCajaPorCierre);
+    const deltaVentasCajaVsEfectivo = ingresosCajaPorVentas - efectivoVentas; // semáforo principal de ventas
+    const ventasOk = Math.abs(deltaVentasCajaVsEfectivo) <= 0.01;
+    const excesoDeposito = Math.max(0, depositoCierreCaja - cajaDisponible);
+    const depositoOk = excesoDeposito <= 0.01;
 
-    const bancoFinal = inicioBanco + ingresosBanco - egresosBanco;
+    const alertas: string[] = [];
+    if (!ventasOk)
+      alertas.push(
+        'Ingresos de caja por ventas no coincide con ventas en efectivo',
+      );
+    if (!depositoOk)
+      alertas.push('Depósito de cierre mayor que la caja disponible');
+    // Si hubo apertura, snapshot es informativo (no alerta “dura”)
+    if (
+      !apertura &&
+      snapPrev &&
+      Math.abs(inicioCaja - N(snapPrev.saldoFinalCaja)) > 0.01
+    ) {
+      alertas.push('Inicio de caja no coincide con snapshot previo');
+    }
 
-    // (Opcional) añade un bloque de diagnóstico en la respuesta:
-    const debugInicio = {
-      porApertura: primeraApertura?.saldoInicial ?? null,
-      porSnapshot: snapPrev?.saldoFinalCaja ?? null,
-      usado: inicioCaja,
-    };
-    this.logger.log('El debug opcional diuce: ', debugInicio);
+    // 8) Respuesta
     return {
-      fecha: inicio.toISOString().slice(0, 10),
+      fecha: day.format('YYYY-MM-DD'),
       sucursalId,
       caja: {
         inicio: inicioCaja,
         ingresos: ingresosCaja,
         egresos: egresosCaja,
-        final: cajaFinal,
+        finalFisico: finalFisicoCaja,
+        egresosSinCierre,
+        finalOperativo: finalOperativoCaja,
       },
       banco: {
         inicio: inicioBanco,
         ingresos: ingresosBanco,
         egresos: egresosBanco,
-        final: bancoFinal,
+        final: finalBanco,
       },
       ventas: {
         total: ventasTotal,
@@ -360,41 +412,60 @@ export class ResumenesAdminService {
       },
       egresos: {
         costosVenta: {
-          total: costosVentaTotal,
-          caja: costosVentaCaja,
-          banco: costosVentaBanco,
-          pagoProveedor: {
-            caja: pagoProveedorCaja,
-            banco: pagoProveedorBanco,
-          },
+          total: costosCaja + costosBanco,
+          caja: costosCaja,
+          banco: costosBanco,
+          pagoProveedor: { caja: pagoProvCaja, banco: pagoProvBanco },
         },
         gastosOperativos: {
-          total: gastosOperativosTotal,
-          caja: gastosOpCaja,
-          banco: gastosOpBanco,
+          total: gastosCaja + gastosBanco,
+          caja: gastosCaja,
+          banco: gastosBanco,
         },
-        depositosCajaABanco: depositosTotalMontoBanco, // SOLO DEPOSITO_CIERRE
       },
-      depositos: {
-        totalMonto: depositosTotalMontoBanco,
-        totalCantidad: depCount,
-        porTipo: {
-          CIERRE_CAJA: {
-            monto: depositosTotalMontoBanco,
-            cantidad: depCount,
-          },
+      transferencias: {
+        depositoCierre: {
+          montoBanco: depositoCierreBanco,
+          montoCaja: depositoCierreCaja,
+          cantidad: depCount,
+          porCuenta,
         },
-        porCuenta: depositosPorCuenta,
+        bancoACaja,
+        // ✅ Validaciones útiles para UI
+        validaciones: {
+          cajaDisponibleAntesDeDepositar: cajaDisponible,
+          excesoDeposito,
+        },
       },
       comparativos: {
+        // (compat)
         netoCajaOperativo,
         efectivoVentas,
-        variacionCajaVsVentasEfectivo,
+        variacionCajaVsVentasEfectivo: variacionVsEfectivo,
+
+        // ✅ Nuevos semáforos claros
+        ingresosCajaPorVentas,
+        ingresosCajaPorVentasEstimado, // true si usamos fallback
+        deltaVentasCajaVsEfectivo,
+        ventasOk,
+
+        cajaDisponibleAntesDeDepositar: cajaDisponible,
+        depositoCierreCaja,
+        excesoDeposito,
+        depositoOk,
+
         alertas,
       },
-      cierre: {
-        huboCierre,
-        montoDepositadoCierre: depositosTotalMontoBanco,
+      diagnostico: {
+        snapshotPrevio: {
+          caja: N(snapPrev?.saldoFinalCaja) ?? null,
+          banco: N(snapPrev?.saldoFinalBanco) ?? null,
+        },
+        aperturaCaja: N(apertura?.saldoInicial) ?? null,
+        chequeos: {
+          identidadCajaOk,
+          identidadBancoOk,
+        },
       },
     };
   }

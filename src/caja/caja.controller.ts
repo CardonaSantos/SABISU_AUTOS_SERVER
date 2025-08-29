@@ -16,6 +16,7 @@ import { CerrarCajaDto } from './dto/CerrarCajaDto';
 import { CerrarCajaV2Dto } from './cerrarCajaTypes';
 import { GetCajasQueryDto } from './GetCajasQueryDto ';
 import { getCajasToCompraDto } from './getCajasToCompra.dto';
+import { CerrarCajaV3Dto } from './dto/CerrarCajaV3Dto';
 
 @Controller('caja')
 export class CajaController {
@@ -36,11 +37,17 @@ export class CajaController {
     return this.cajaService.cerrarCajaV2(dto);
   }
 
+  @Post('/cerrar-v3')
+  newCerrarCaja(@Body() dto: CerrarCajaV3Dto) {
+    return this.cajaService.cerrarCajaV3(dto);
+  }
+
   //CERRAR LA CAJA
   @Patch('/cerrar-caja')
-  create(@Body() dto: CerrarCajaDto) {
-    return this.cajaService.cerrarCaja(dto);
+  create(@Body() dto: CerrarCajaV3Dto) {
+    return this.cajaService.cerrarCajaV3(dto);
   }
+
   @Get('/get-ultimo-saldo-sucursal/:sucursalID')
   getUltimoSaldoSucursal(
     @Param('sucursalID', ParseIntPipe) sucursalID: number,

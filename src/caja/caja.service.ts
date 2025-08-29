@@ -31,6 +31,7 @@ import { GetCajasQueryDto } from './GetCajasQueryDto ';
 import { UtilitiesService } from 'src/utilities/utilities.service';
 import { getCajasToCompraDto } from './getCajasToCompra.dto';
 import { TZGT } from 'src/utils/utils';
+import { CerrarCajaV3Dto } from './dto/CerrarCajaV3Dto';
 dayjs.extend(utc);
 dayjs.extend(timezone);
 dayjs.extend(isSameOrBefore);
@@ -436,6 +437,249 @@ export class CajaService {
         nuevoTurno,
         enCajaAntes: enCaja,
         enCajaOperable,
+        warnings,
+      };
+    });
+  }
+
+  /**
+   * NUEVO SERVICIO QUE USAREMOS
+   * @param registroCajaId
+   * @returns
+   */
+  async cerrarCajaV3(dto: CerrarCajaV3Dto) {
+    this.logger.log('El dto es: ', dto);
+    const fechaCorte = dayjs().tz(TZGT).toDate();
+    const {
+      registroCajaId,
+      usuarioCierreId,
+      comentarioFinal,
+      modo,
+      cuentaBancariaId,
+      montoParcial,
+      dejarEnCaja,
+      asentarVentas = true,
+      abrirSiguiente,
+      usuarioInicioSiguienteId,
+      fondoFijoSiguiente,
+      comentarioAperturaSiguiente,
+    } = dto;
+
+    const n = (v: any) => Number(v ?? 0);
+    const r2 = (x: number) => Math.round(x * 100) / 100;
+    const CASH_METHODS = ['EFECTIVO', 'CONTADO', 'CASH', 'CHEQUE'] as const;
+
+    return this.prisma.$transaction(async (tx) => {
+      // 1) Turno
+      const turno = await tx.registroCaja.findUnique({
+        where: { id: registroCajaId },
+        select: {
+          id: true,
+          estado: true,
+          saldoInicial: true,
+          fondoFijo: true,
+          sucursalId: true,
+          fechaApertura: true,
+        },
+      });
+      if (!turno || turno.estado !== 'ABIERTO') {
+        throw new BadRequestException('Turno no encontrado o ya cerrado');
+      }
+
+      // Ventana del día (para snapshots y ventas)
+      const day = dayjs(turno.fechaApertura ?? fechaCorte).tz(TZGT);
+      const dayStart = day.startOf('day').toDate();
+      const dayEnd = day.endOf('day').toDate();
+
+      // 2) (Opcional) Asentar ventas en efectivo en Caja
+      let ventasEfectivo = 0;
+      let yaRegistradoCajaVenta = 0;
+      let movIngresoVentas: any = null;
+
+      if (asentarVentas) {
+        // total cobrado en efectivo (pagos de ventas) del día en la sucursal
+        const pagos = await tx.pago.groupBy({
+          by: ['metodoPago'],
+          where: {
+            venta: {
+              is: {
+                sucursalId: turno.sucursalId,
+                fechaVenta: { gte: dayStart, lte: dayEnd },
+              },
+            },
+          },
+          _sum: { monto: true },
+        });
+        ventasEfectivo = pagos
+          .filter((p) => CASH_METHODS.includes(p.metodoPago as any))
+          .reduce((acc, p) => acc + n(p._sum.monto), 0);
+
+        // lo que YA se asentó como ingreso de venta en caja (este turno)
+        const ingCajaAgg = await tx.movimientoFinanciero.aggregate({
+          _sum: { deltaCaja: true },
+          where: {
+            registroCajaId: turno.id,
+            clasificacion: 'INGRESO',
+            motivo: 'VENTA',
+            deltaCaja: { gt: 0 },
+          },
+        });
+        yaRegistradoCajaVenta = n(ingCajaAgg._sum.deltaCaja);
+
+        const faltaAsentar = ventasEfectivo - yaRegistradoCajaVenta;
+        if (faltaAsentar > 0.01) {
+          movIngresoVentas = await tx.movimientoFinanciero.create({
+            data: {
+              sucursalId: turno.sucursalId,
+              registroCajaId: turno.id,
+              clasificacion: 'INGRESO',
+              motivo: 'VENTA',
+              deltaCaja: r2(faltaAsentar),
+              deltaBanco: 0,
+              descripcion: 'Ingreso ventas efectivo (cierre de turno)',
+              referencia: `CIERRE_${day.format('YYYYMMDD')}`,
+              usuarioId: usuarioCierreId,
+            },
+          });
+        }
+      }
+
+      // 3) Efectivo en caja tras asentar ventas
+      const agg1 = await tx.movimientoFinanciero.aggregate({
+        _sum: { deltaCaja: true },
+        where: { registroCajaId: turno.id },
+      });
+      const enCaja = r2(n(turno.saldoInicial) + n(agg1._sum.deltaCaja));
+
+      // 4) Política de "base": cuánto dejar en caja
+      const base = r2(n(dejarEnCaja ?? turno.fondoFijo ?? 0));
+      const enCajaOperable = Math.max(0, r2(enCaja - base));
+
+      // 5) Determinar monto de depósito según modo (con clamps)
+      let deposito = 0;
+      switch (modo) {
+        case 'DEPOSITO_TODO':
+          deposito = enCajaOperable;
+          break;
+        case 'DEPOSITO_PARCIAL':
+          if (!montoParcial || montoParcial <= 0) {
+            throw new BadRequestException('Monto parcial inválido');
+          }
+          deposito = Math.min(r2(montoParcial), enCajaOperable);
+          break;
+        case 'SIN_DEPOSITO':
+        case 'CAMBIO_TURNO':
+          deposito = 0;
+          break;
+        default:
+          throw new BadRequestException('Modo de cierre no soportado');
+      }
+      deposito = r2(deposito);
+
+      if (deposito > 0 && !cuentaBancariaId) {
+        throw new BadRequestException(
+          'Cuenta bancaria requerida para depósito',
+        );
+      }
+
+      // 6) Crear MF de depósito (si aplica)
+      let movDeposito: any = null;
+      if (deposito > 0) {
+        movDeposito = await tx.movimientoFinanciero.create({
+          data: {
+            sucursalId: turno.sucursalId,
+            registroCajaId: turno.id,
+            clasificacion: 'TRANSFERENCIA',
+            motivo: 'DEPOSITO_CIERRE',
+            metodoPago: 'TRANSFERENCIA',
+            deltaCaja: -deposito,
+            deltaBanco: +deposito,
+            cuentaBancariaId,
+            esDepositoCierre: true,
+            descripcion: 'Depósito de cierre',
+            usuarioId: usuarioCierreId,
+          },
+        });
+      }
+
+      // 7) Recalcular saldo final de caja y cerrar turno
+      const agg2 = await tx.movimientoFinanciero.aggregate({
+        _sum: { deltaCaja: true },
+        where: { registroCajaId: turno.id },
+      });
+      const saldoFinal = r2(n(turno.saldoInicial) + n(agg2._sum.deltaCaja));
+
+      const cerrado = await tx.registroCaja.update({
+        where: { id: turno.id },
+        data: {
+          estado: 'CERRADO',
+          fechaCierre: new Date(),
+          saldoFinal,
+          comentarioFinal: comentarioFinal ?? null,
+          depositado: deposito > 0,
+        },
+      });
+
+      // 8) Snapshots (día de la sucursal y global)
+      await this.upsertSucursalSnapshot(tx, turno.sucursalId, fechaCorte);
+      await this.refreshGlobalSnapshot(tx, fechaCorte);
+
+      // 9) Cambio de turno (opcional)
+      let nuevoTurno: any = null;
+      const abrir = modo === 'CAMBIO_TURNO' ? (abrirSiguiente ?? true) : false;
+      if (abrir) {
+        const nextUser = usuarioInicioSiguienteId ?? usuarioCierreId;
+        const nextFondo = n(fondoFijoSiguiente ?? turno.fondoFijo ?? 0);
+        nuevoTurno = await tx.registroCaja.create({
+          data: {
+            sucursalId: turno.sucursalId,
+            usuarioInicioId: nextUser,
+            saldoInicial: saldoFinal, // arrastra lo que queda
+            fondoFijo: nextFondo,
+            comentario:
+              comentarioAperturaSiguiente ?? 'Apertura por cambio de turno',
+            estado: 'ABIERTO',
+          },
+        });
+      }
+
+      // 10) Warnings / diagnósticos
+      const warnings: string[] = [];
+      const exceso = r2(Math.max(0, deposito - enCajaOperable));
+      if (exceso > 0)
+        warnings.push(
+          `Se intentó depositar por encima de lo disponible en caja (exceso ${exceso}).`,
+        );
+      const ventasDelta = r2(
+        ventasEfectivo -
+          (yaRegistradoCajaVenta + (movIngresoVentas?.deltaCaja ?? 0)),
+      );
+      if (asentarVentas && Math.abs(ventasDelta) > 0.01) {
+        warnings.push(
+          'Ventas en efectivo no quedaron completamente asentadas.',
+        );
+      }
+
+      return {
+        turnoCerrado: {
+          id: cerrado.id,
+          saldoFinal,
+          depositoRealizado: deposito,
+        },
+        movimientos: {
+          ingresoVentas: movIngresoVentas,
+          deposito: movDeposito,
+        },
+        cajas: {
+          enCajaAntes: enCaja,
+          baseDejada: base,
+          disponibleOperable: enCajaOperable,
+        },
+        ventas: {
+          efectivo: r2(ventasEfectivo),
+          yaRegistrado: r2(yaRegistradoCajaVenta),
+        },
+        nuevoTurno,
         warnings,
       };
     });
@@ -945,6 +1189,8 @@ export class CajaService {
 
     await this.prisma.sucursalSaldoDiario.deleteMany({});
     await this.prisma.saldoGlobalDiario.deleteMany({});
+    await this.prisma.venta.deleteMany({});
+
     return this.prisma.registroCaja.deleteMany({});
   }
 

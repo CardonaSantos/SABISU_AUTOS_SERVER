@@ -32,27 +32,82 @@ export class CajaAdministrativoController {
     private readonly cajaAdministrativoService: CajaAdministrativoService,
   ) {}
 
+  /**
+   * Flujo cajas por sucursal
+   * @param sucursalId
+   * @param from
+   * @param to
+   * @returns
+   */
   @Get('sucursal/:sucursalId')
   async flujoSucursal(
     @Param('sucursalId', ParseIntPipe) sucursalId: number,
-    @Query('from') from: string,
-    @Query('to') to: string,
+    @Query('from') from?: string, // YYYY-MM-DD
+    @Query('to') to?: string, // YYYY-MM-DD
   ) {
+    const fromDate = from
+      ? dayjs.tz(from, 'YYYY-MM-DD', TZGT).startOf('day').toDate()
+      : dayjs().tz(TZGT).startOf('month').toDate();
+
+    const toDate = to
+      ? dayjs.tz(to, 'YYYY-MM-DD', TZGT).endOf('day').toDate()
+      : dayjs().tz(TZGT).endOf('day').toDate();
+
+    if (
+      !dayjs(fromDate).isValid() ||
+      !dayjs(toDate).isValid() ||
+      fromDate > toDate
+    ) {
+      throw new BadRequestException('Rango de fechas inválido');
+    }
+
     return this.cajaAdministrativoService.getFlujoSucursal({
       sucursalId,
-      from: new Date(from).toISOString(),
-      to: new Date(to).toISOString(),
+      from: fromDate,
+      to: toDate,
     });
   }
 
+  /**
+   * Flujos cajas global
+   * @param from
+   * @param to
+   * @returns
+   */
   @Get('global')
-  async flujoGlobal(@Query('from') from: string, @Query('to') to: string) {
+  async flujoGlobal(
+    @Query('from') from?: string, // YYYY-MM-DD
+    @Query('to') to?: string, // YYYY-MM-DD
+  ) {
+    const fromDate = from
+      ? dayjs.tz(from, 'YYYY-MM-DD', TZGT).startOf('day').toDate()
+      : dayjs().tz(TZGT).startOf('month').toDate();
+
+    const toDate = to
+      ? dayjs.tz(to, 'YYYY-MM-DD', TZGT).endOf('day').toDate()
+      : dayjs().tz(TZGT).endOf('day').toDate();
+
+    if (
+      !dayjs(fromDate).isValid() ||
+      !dayjs(toDate).isValid() ||
+      fromDate > toDate
+    ) {
+      throw new BadRequestException('Rango de fechas inválido');
+    }
+
     return this.cajaAdministrativoService.getFlujoGlobal({
-      from: new Date(from),
-      to: new Date(to),
+      from: fromDate,
+      to: toDate,
     });
   }
 
+  /**
+   * Costos ventas historicos => REFACTORIZADO
+   * @param sucursalId
+   * @param from
+   * @param to
+   * @returns
+   */
   @Get('costos-venta-historico')
   async costosVentaHistorico(
     @Query('sucursalId') sucursalId?: string,
@@ -66,6 +121,13 @@ export class CajaAdministrativoController {
     });
   }
 
+  /**
+   * Gastos operativos  historicos => REFACTORIZADO
+   * @param sucursalId
+   * @param from
+   * @param to
+   * @returns
+   */
   @Get('gastos-operativos')
   async gastosOperativos(
     @Query('sucursalId') sucursalId?: string,
@@ -85,6 +147,13 @@ export class CajaAdministrativoController {
     return this.cajaAdministrativoService.getGastosOperativos(dto);
   }
 
+  /**
+   * Flujo efectivo => refactorizado
+   * @param sucursalId
+   * @param from
+   * @param to
+   * @returns
+   */
   @Get('flujo-efectivo')
   async flujoEfectivo(
     @Query('sucursalId') sucursalId?: string,
@@ -109,6 +178,23 @@ export class CajaAdministrativoController {
       sucursalId: sucId,
       from: fromDate,
       to: toDate,
+    });
+  }
+
+  /** estados resultados => nuevo a hacer UI
+   * GET /finanzas/estado-resultados?sucursalId=1&from=2025-08-01&to=2025-08-31
+   */
+  @Get('estado-resultados')
+  async estadoResultados(
+    @Query('sucursalId') sucursalId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    const sid = sucursalId ? Number(sucursalId) : undefined;
+    return this.cajaAdministrativoService.getEstadoResultados({
+      sucursalId: sid,
+      from,
+      to,
     });
   }
 }

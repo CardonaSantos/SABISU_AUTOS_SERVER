@@ -365,6 +365,10 @@ model VentaEliminadaProducto {
 
     creadoEn         DateTime   @default(now())
     actualizadoEn    DateTime   @updatedAt
+    // esAsientoVentas  Boolean   @default(false) // 👈 nuevo
+
+    // @@unique([registroCajaId, referencia], map: "uq_movfin_turno_referencia") // 👈 idempotencia por turno
+    // @@index([registroCajaId, esAsientoVentas])                                  // 👈 útil para consultas
 
     @@index([sucursalId, fecha])
     @@index([registroCajaId])
