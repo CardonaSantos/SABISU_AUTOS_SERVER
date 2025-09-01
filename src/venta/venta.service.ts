@@ -37,6 +37,7 @@ export class VentaService {
       productos,
       metodoPago,
       nombre,
+      apellidos,
       dpi,
       telefono,
       direccion,
@@ -65,7 +66,14 @@ export class VentaService {
           clienteConnect = { connect: { id: clienteId } };
         } else if (nombre) {
           const nuevoCliente = await tx.cliente.create({
-            data: { nombre, dpi, telefono, direccion, observaciones },
+            data: {
+              nombre,
+              apellidos,
+              dpi,
+              telefono,
+              direccion,
+              observaciones,
+            },
           });
           clienteConnect = { connect: { id: nuevoCliente.id } };
         }
