@@ -35,7 +35,11 @@ export class MovimientoFinancieroService {
 
     // 0) Normalizar método de pago ANTES del mapeo
     if (!dto.metodoPago) {
-      if (motivo === 'DEPOSITO_CIERRE' || motivo === 'PAGO_PROVEEDOR_BANCO') {
+      if (
+        motivo === 'DEPOSITO_CIERRE' ||
+        motivo === 'PAGO_PROVEEDOR_BANCO' ||
+        dto.motivo === 'BANCO_A_CAJA' //nuevo
+      ) {
         dto.metodoPago = 'TRANSFERENCIA';
       } else {
         dto.metodoPago = dto.cuentaBancariaId ? 'TRANSFERENCIA' : 'EFECTIVO';
@@ -57,13 +61,26 @@ export class MovimientoFinancieroService {
     // 2) Coherencia método de pago ↔ efectos
     const esDepositoCierre =
       dto.motivo === 'DEPOSITO_CIERRE' || !!dto.esDepositoCierre;
+    const esBancoACaja = dto.motivo === 'BANCO_A_CAJA';
 
+    // if (dto.metodoPago === 'EFECTIVO' && afectaBanco) {
+    //   throw new BadRequestException('Efectivo no puede afectar banco.');
+    // }
+    // if (dto.metodoPago !== 'EFECTIVO' && afectaCaja && !esDepositoCierre) {
+    //   throw new BadRequestException(
+    //     'Un movimiento no-efectivo no debe afectar caja (salvo depósito de cierre).',
+    //   );
+    // }
     if (dto.metodoPago === 'EFECTIVO' && afectaBanco) {
       throw new BadRequestException('Efectivo no puede afectar banco.');
     }
-    if (dto.metodoPago !== 'EFECTIVO' && afectaCaja && !esDepositoCierre) {
+    if (
+      dto.metodoPago !== 'EFECTIVO' &&
+      afectaCaja &&
+      !(esDepositoCierre || esBancoACaja)
+    ) {
       throw new BadRequestException(
-        'Un movimiento no-efectivo no debe afectar caja (salvo depósito de cierre).',
+        'Un movimiento no-efectivo no debe afectar caja (salvo depósito de cierre o banco→caja).',
       );
     }
 
@@ -128,6 +145,23 @@ export class MovimientoFinancieroService {
         }
 
         // 3.3) Reglas especiales
+        // if (esDepositoCierre) {
+        //   if (!(deltaCaja < 0 && deltaBanco > 0)) {
+        //     throw new BadRequestException(
+        //       'Depósito de cierre debe mover caja(-) y banco(+).',
+        //     );
+        //   }
+        //   if (!registroCajaId) {
+        //     throw new BadRequestException(
+        //       'Depósito de cierre requiere turno de caja.',
+        //     );
+        //   }
+        //   if (!dto.cuentaBancariaId) {
+        //     throw new BadRequestException(
+        //       'Depósito de cierre requiere cuenta bancaria de destino.',
+        //     );
+        //   }
+        // }
         if (esDepositoCierre) {
           if (!(deltaCaja < 0 && deltaBanco > 0)) {
             throw new BadRequestException(
@@ -142,6 +176,22 @@ export class MovimientoFinancieroService {
           if (!dto.cuentaBancariaId) {
             throw new BadRequestException(
               'Depósito de cierre requiere cuenta bancaria de destino.',
+            );
+          }
+        }
+
+        if (esBancoACaja) {
+          if (!(deltaCaja > 0 && deltaBanco < 0)) {
+            throw new BadRequestException(
+              'Banco→Caja debe mover caja(+) y banco(-).',
+            );
+          }
+          if (!registroCajaId) {
+            throw new BadRequestException('Banco→Caja requiere turno de caja.');
+          }
+          if (!dto.cuentaBancariaId) {
+            throw new BadRequestException(
+              'Banco→Caja requiere cuenta bancaria de origen.',
             );
           }
         }
@@ -242,6 +292,14 @@ export class MovimientoFinancieroService {
           deltaBanco = +x;
         }
         break;
+      //NUEVO
+      case MotivoMovimiento.BANCO_A_CAJA: {
+        clasificacion = ClasificacionAdmin.TRANSFERENCIA;
+        deltaCaja = +x; // entra efectivo a caja
+        deltaBanco = -x; // sale del banco
+        necesitaTurno = true; // requiere caja abierta
+        break;
+      }
 
       case MotivoMovimiento.OTRO_INGRESO:
         clasificacion = ClasificacionAdmin.INGRESO;

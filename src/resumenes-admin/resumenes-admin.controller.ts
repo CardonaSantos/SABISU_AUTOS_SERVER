@@ -65,16 +65,15 @@ export class ResumenesAdminController {
       tz,
     });
   }
-
   @Get('historico-global')
   async historicoGlobal(
     @Query('from') from: string,
     @Query('to') to: string,
-    @Query('tz') tz = '-06:00',
+    @Query('tz') tz = 'America/Guatemala', // <-- en vez de '-06:00'
   ) {
     if (!from || !to)
       throw new BadRequestException('from y to son obligatorios');
-    return this.resumenesAdminService.historicoGlobal({ from, to, tz });
+    return this.resumenesAdminService.historicoSaldos({ from, to, tz });
   }
 
   @Get('get-depositos-cierres-proveedores')

@@ -17,6 +17,7 @@ import * as isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
 import * as isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
 import { TZGT } from 'src/utils/utils';
 import { ResumenDiarioAdminResponse } from './interfaces';
+import { MotivoMovimiento, Prisma } from '@prisma/client';
 dayjs.extend(utc);
 dayjs.extend(timezone);
 dayjs.extend(isSameOrBefore);
@@ -33,6 +34,99 @@ function N(v: any): number {
     return Number((v as any).toString());
   return Number(v) || 0;
 }
+
+// NUEVOS
+type DaySlot = { dayStr: string; inicio: Date; fin: Date };
+
+interface GetGlobalHistoricoParams {
+  from?: string; // 'YYYY-MM-DD'
+  to?: string; // 'YYYY-MM-DD'
+  tz?: string; // por defecto TZGT
+  sucursalId?: number;
+}
+
+type TzSpec =
+  | { kind: 'iana'; zone: string }
+  | { kind: 'offset'; minutes: number };
+
+const TZ_DEFAULT = (typeof TZGT === 'string' && TZGT) || 'America/Guatemala';
+
+function parseTz(tz?: string): TzSpec {
+  if (!tz) return { kind: 'iana', zone: TZ_DEFAULT };
+  if (tz.includes('/')) return { kind: 'iana', zone: tz }; // IANA
+  const m = /^([+-])(\d{2}):(\d{2})$/.exec(tz);
+  if (m) {
+    const sign = m[1] === '-' ? -1 : 1;
+    const minutes = sign * (parseInt(m[2], 10) * 60 + parseInt(m[3], 10));
+    return { kind: 'offset', minutes };
+  }
+  // fallback seguro
+  return { kind: 'iana', zone: TZ_DEFAULT };
+}
+
+// clave para construir el rango día a día en la zona dada
+function buildDayRange(from: string, to: string, spec: TzSpec) {
+  const start =
+    spec.kind === 'iana'
+      ? dayjs.tz(from, spec.zone).startOf('day')
+      : dayjs(from).utcOffset(spec.minutes).startOf('day');
+
+  const end =
+    spec.kind === 'iana'
+      ? dayjs.tz(to, spec.zone).startOf('day')
+      : dayjs(to).utcOffset(spec.minutes).startOf('day');
+
+  const days: Array<{ dayStr: string; inicio: Date; fin: Date }> = [];
+  for (
+    let d = start.clone();
+    d.isSame(end) || d.isBefore(end);
+    d = d.add(1, 'day')
+  ) {
+    const inicio = d.startOf('day').toDate(); // UTC Date del inicio local
+    const fin = d.endOf('day').toDate(); // UTC Date del fin local
+    const dayStr =
+      spec.kind === 'iana'
+        ? d.tz(spec.zone).format('YYYY-MM-DD')
+        : d.utcOffset(spec.minutes).format('YYYY-MM-DD');
+    days.push({ dayStr, inicio, fin });
+  }
+  return days;
+}
+
+// normaliza cualquier Date a 'YYYY-MM-DD' en la zona dada
+function dayKey(date: Date, spec: TzSpec) {
+  return spec.kind === 'iana'
+    ? dayjs(date).tz(spec.zone).format('YYYY-MM-DD')
+    : dayjs(date).utcOffset(spec.minutes).format('YYYY-MM-DD');
+}
+// ---------- helpers ----------
+
+// ---------- respuesta API ----------
+export interface SaldosHistoricoResponse {
+  rango: { from: string; to: string; tz: string; sucursalId?: number };
+  days: Array<{
+    fecha: string; // YYYY-MM-DD
+    snapshotId: number | null;
+    caja: { inicio: number; ingresos: number; egresos: number; final: number };
+    banco: { inicio: number; ingresos: number; egresos: number; final: number };
+    ventas: { total: number; cantidad: number };
+    depositos: { monto: number; cantidad: number };
+    flags: { sinSnapshot: boolean };
+  }>;
+  periodSummary: {
+    caja: { ingresos: number; egresos: number; final: number };
+    banco: { ingresos: number; egresos: number; final: number };
+    ventas: { total: number; cantidad: number };
+    depositos: { monto: number; cantidad: number };
+  };
+}
+type HistoricoParams = {
+  from: string; // 'YYYY-MM-DD'
+  to: string; // 'YYYY-MM-DD'
+  tz?: string; // ej. '-06:00' (GT)
+  sucursalId?: number; // si viene => histórico por sucursal; si no => GLOBAL
+};
+
 @Injectable()
 export class ResumenesAdminService {
   private readonly UMBRAL_DESCUADRE = 0.01;
@@ -106,6 +200,9 @@ export class ResumenesAdminService {
     sucursalId: number,
     dateISO: string,
   ): Promise<ResumenDiarioAdminResponse> {
+    // Helpers locales
+    const N = (v: any) => Number(v ?? 0);
+
     // 1) Día TZ GT [00:00, 23:59:59]
     const day = dayjs.tz(dateISO.slice(0, 10), 'YYYY-MM-DD', TZGT);
     const inicio = day.startOf('day').toDate();
@@ -113,7 +210,7 @@ export class ResumenesAdminService {
 
     const whereMov = { sucursalId, fecha: { gte: inicio, lte: fin } } as const;
 
-    // 2) Sumatorias por canal (signo separado)
+    // 2) Sumatorias por canal (signo separado) — SIN filtros especiales
     const [cajaIn, cajaOut, banIn, banOut] = await Promise.all([
       this.prisma.movimientoFinanciero.aggregate({
         _sum: { deltaCaja: true },
@@ -194,7 +291,7 @@ export class ResumenesAdminService {
           _sum: { deltaCaja: true },
           where: {
             ...whereMov,
-            clasificacion: 'COSTO_VENTA',
+            clasificacion: 'COSTO_VENTA', // si es enum, cambia a tu enum
             deltaCaja: { lt: 0 },
           },
         }),
@@ -236,18 +333,28 @@ export class ResumenesAdminService {
         where: {
           ...whereMov,
           clasificacion: 'COSTO_VENTA',
-          motivo: { in: ['DEPOSITO_PROVEEDOR', 'PAGO_PROVEEDOR_BANCO'] },
+          motivo: {
+            in: [
+              MotivoMovimiento.DEPOSITO_PROVEEDOR,
+              MotivoMovimiento.PAGO_PROVEEDOR_BANCO,
+            ],
+          },
           deltaCaja: { lt: 0 },
-        },
+        } as Prisma.MovimientoFinancieroWhereInput,
       }),
       this.prisma.movimientoFinanciero.aggregate({
         _sum: { deltaBanco: true },
         where: {
           ...whereMov,
           clasificacion: 'COSTO_VENTA',
-          motivo: { in: ['DEPOSITO_PROVEEDOR', 'PAGO_PROVEEDOR_BANCO'] },
+          motivo: {
+            in: [
+              MotivoMovimiento.DEPOSITO_PROVEEDOR,
+              MotivoMovimiento.PAGO_PROVEEDOR_BANCO,
+            ],
+          },
           deltaBanco: { lt: 0 },
-        },
+        } as Prisma.MovimientoFinancieroWhereInput,
       }),
     ]);
     const pagoProvCaja = Math.abs(N(provCajaAgg._sum.deltaCaja));
@@ -257,13 +364,13 @@ export class ResumenesAdminService {
     const [depCount, depSumBanco, depSumCaja, depPorCuenta] = await Promise.all(
       [
         this.prisma.movimientoFinanciero.count({
-          where: { ...whereMov, motivo: 'DEPOSITO_CIERRE' },
+          where: { ...whereMov, motivo: MotivoMovimiento.DEPOSITO_CIERRE },
         }),
         this.prisma.movimientoFinanciero.aggregate({
           _sum: { deltaBanco: true },
           where: {
             ...whereMov,
-            motivo: 'DEPOSITO_CIERRE',
+            motivo: MotivoMovimiento.DEPOSITO_CIERRE,
             deltaBanco: { gt: 0 },
           },
         }),
@@ -271,7 +378,7 @@ export class ResumenesAdminService {
           _sum: { deltaCaja: true },
           where: {
             ...whereMov,
-            motivo: 'DEPOSITO_CIERRE',
+            motivo: MotivoMovimiento.DEPOSITO_CIERRE,
             deltaCaja: { lt: 0 },
           },
         }),
@@ -279,7 +386,7 @@ export class ResumenesAdminService {
           by: ['cuentaBancariaId'],
           where: {
             ...whereMov,
-            motivo: 'DEPOSITO_CIERRE',
+            motivo: MotivoMovimiento.DEPOSITO_CIERRE,
             deltaBanco: { gt: 0 },
           },
           _sum: { deltaBanco: true },
@@ -316,7 +423,7 @@ export class ResumenesAdminService {
       _sum: { deltaCaja: true },
       where: {
         ...whereMov,
-        clasificacion: 'TRANSFERENCIA',
+        clasificacion: 'TRANSFERENCIA', // si es enum, cambia a tu enum
         deltaCaja: { gt: 0 },
         deltaBanco: { lt: 0 },
       },
@@ -329,7 +436,6 @@ export class ResumenesAdminService {
     const finalOperativoCaja = inicioCaja + ingresosCaja - egresosSinCierre;
 
     const cajaDisponible = inicioCaja + ingresosCaja - egresosSinCierre; // antes de depositar
-    const depositoMayorADisponible = depositoCierreCaja > cajaDisponible;
 
     const finalBanco = inicioBanco + ingresosBanco - egresosBanco;
 
@@ -340,31 +446,45 @@ export class ResumenesAdminService {
       Math.abs(finalBanco - (inicioBanco + ingresosBanco - egresosBanco)) <
       0.001;
 
-    // 7.1) Ingresos de Caja POR VENTAS (para cuadre de ventas)
-    const ingCajaVentasAgg = await this.prisma.movimientoFinanciero.aggregate({
+    // 7.1) Ingresos de Caja POR VENTAS (semáforo)
+    // POS primero (excluye asientos)
+    const posAgg = await this.prisma.movimientoFinanciero.aggregate({
       _sum: { deltaCaja: true },
       where: {
         ...whereMov,
-        clasificacion: 'INGRESO',
-        motivo: 'VENTA',
+        motivo: MotivoMovimiento.VENTA,
+        esAsientoVentas: { not: true },
         deltaCaja: { gt: 0 },
       },
     });
-    let ingresosCajaPorVentas = Math.abs(N(ingCajaVentasAgg._sum.deltaCaja));
+    let ingresosCajaPorVentas = N(posAgg._sum.deltaCaja);
     let ingresosCajaPorVentasEstimado = false;
 
-    // Fallback: si no registras MF de ventas y sí hay pagos en efectivo,
-    // asumimos ingresosCajaPorVentas = efectivoVentas (no duplica si luego registras MF)
-    if (ingresosCajaPorVentas === 0 && efectivoVentas > 0) {
-      ingresosCajaPorVentas = efectivoVentas;
-      ingresosCajaPorVentasEstimado = true;
+    if (ingresosCajaPorVentas === 0) {
+      // Fallback 1: asiento por diferencia
+      const asientoAgg = await this.prisma.movimientoFinanciero.aggregate({
+        _sum: { deltaCaja: true },
+        where: {
+          ...whereMov,
+          motivo: MotivoMovimiento.VENTA,
+          esAsientoVentas: true,
+          deltaCaja: { gt: 0 },
+        },
+      });
+      ingresosCajaPorVentas = N(asientoAgg._sum.deltaCaja);
+
+      // Fallback 2: pagos en efectivo (estimado)
+      if (ingresosCajaPorVentas === 0 && efectivoVentas > 0) {
+        ingresosCajaPorVentas = efectivoVentas;
+        ingresosCajaPorVentasEstimado = true;
+      }
     }
 
     // 7.2) Comparativos
     const netoCajaOperativo = ingresosCaja - egresosSinCierre; // informativo
     const variacionVsEfectivo = netoCajaOperativo - efectivoVentas; // informativo
 
-    const deltaVentasCajaVsEfectivo = ingresosCajaPorVentas - efectivoVentas; // semáforo principal de ventas
+    const deltaVentasCajaVsEfectivo = ingresosCajaPorVentas - efectivoVentas; // semáforo principal
     const ventasOk = Math.abs(deltaVentasCajaVsEfectivo) <= 0.01;
     const excesoDeposito = Math.max(0, depositoCierreCaja - cajaDisponible);
     const depositoOk = excesoDeposito <= 0.01;
@@ -376,7 +496,6 @@ export class ResumenesAdminService {
       );
     if (!depositoOk)
       alertas.push('Depósito de cierre mayor que la caja disponible');
-    // Si hubo apertura, snapshot es informativo (no alerta “dura”)
     if (
       !apertura &&
       snapPrev &&
@@ -431,21 +550,18 @@ export class ResumenesAdminService {
           porCuenta,
         },
         bancoACaja,
-        // ✅ Validaciones útiles para UI
         validaciones: {
           cajaDisponibleAntesDeDepositar: cajaDisponible,
           excesoDeposito,
         },
       },
       comparativos: {
-        // (compat)
         netoCajaOperativo,
         efectivoVentas,
         variacionCajaVsVentasEfectivo: variacionVsEfectivo,
 
-        // ✅ Nuevos semáforos claros
         ingresosCajaPorVentas,
-        ingresosCajaPorVentasEstimado, // true si usamos fallback
+        ingresosCajaPorVentasEstimado,
         deltaVentasCajaVsEfectivo,
         ventasOk,
 
@@ -821,89 +937,202 @@ export class ResumenesAdminService {
   }
 
   // -------- Público: Histórico global --------
-  async historicoGlobal(params: { from: string; to: string; tz?: string }) {
-    const { from, to, tz = '-06:00' } = params;
-    const days = this.buildDayRange(from, to, tz);
-    this.logger.debug('Los days generados son:', days);
-    this.logger.log('Las fechas son: ', from, to, tz);
-    const snaps = await this.prisma.saldoGlobalDiario.findMany({
-      where: { fecha: { gte: days[0].inicio, lt: days[days.length - 1].fin } },
-      orderBy: { fecha: 'asc' },
-      select: {
-        id: true,
-        fecha: true,
-        saldoTotalCaja: true,
-        ingresosTotalCaja: true,
-        egresosTotalCaja: true,
-        saldoTotalBanco: true,
-        ingresosTotalBanco: true,
-        egresosTotalBanco: true,
+  async historicoSaldos(params: HistoricoParams) {
+    // 1) NUNCA default a "-06:00" aquí; usa IANA seguro
+    const { from, to, tz = 'America/Guatemala', sucursalId } = params;
+
+    const spec = parseTz(tz);
+    const days = buildDayRange(from, to, spec);
+
+    const rangeInicio = days[0].inicio;
+    const rangeFin = days[days.length - 1].fin; // fin del último día (inclusive)
+
+    // 2) Snapshots (GLOBAL vs SUCURSAL) usando lte para incluir el final del día
+    const snaps =
+      sucursalId != null
+        ? await this.prisma.sucursalSaldoDiario.findMany({
+            where: { sucursalId, fecha: { gte: rangeInicio, lte: rangeFin } },
+            orderBy: { fecha: 'asc' },
+            select: {
+              id: true,
+              fecha: true,
+              ingresosCaja: true,
+              egresosCaja: true,
+              saldoFinalCaja: true,
+              ingresosBanco: true,
+              egresosBanco: true,
+              saldoFinalBanco: true,
+            },
+          })
+        : await this.prisma.saldoGlobalDiario.findMany({
+            where: { fecha: { gte: rangeInicio, lte: rangeFin } },
+            orderBy: { fecha: 'asc' },
+            select: {
+              id: true,
+              fecha: true,
+              ingresosTotalCaja: true,
+              egresosTotalCaja: true,
+              saldoTotalCaja: true,
+              ingresosTotalBanco: true,
+              egresosTotalBanco: true,
+              saldoTotalBanco: true,
+            },
+          });
+
+    // 3) Indexar por día, usando SIEMPRE la zona/offset (no UTC crudo)
+    const byDay: Record<string, any> = Object.create(null);
+    for (const s of snaps) {
+      byDay[dayKey(s.fecha, spec)] = s;
+    }
+
+    // 4) Ventas del período (cards y por día) — NUNCA .tz(tz) si tz es offset; usa dayKey
+    const ventasRows = await this.prisma.venta.findMany({
+      where: {
+        ...(sucursalId != null ? { sucursalId } : {}),
+        fechaVenta: { gte: rangeInicio, lte: rangeFin },
       },
+      select: { totalVenta: true, fechaVenta: true },
     });
 
-    const byDay: Record<string, (typeof snaps)[number]> = {};
-    for (const s of snaps) byDay[s.fecha.toISOString().slice(0, 10)] = s;
+    const ventasByDay: Record<string, { total: number; count: number }> = {};
+    let ventasPeriodoTotal = 0;
+    let ventasPeriodoCount = 0;
 
+    for (const v of ventasRows) {
+      const d = dayKey(v.fechaVenta, spec);
+      if (!ventasByDay[d]) ventasByDay[d] = { total: 0, count: 0 };
+      ventasByDay[d].total += N(v.totalVenta);
+      ventasByDay[d].count += 1;
+      ventasPeriodoTotal += N(v.totalVenta);
+      ventasPeriodoCount += 1;
+    }
+
+    // 5) Depósitos del período (cards y por día)
+    const depRows = await this.prisma.movimientoFinanciero.findMany({
+      where: {
+        ...(sucursalId != null ? { sucursalId } : {}),
+        fecha: { gte: rangeInicio, lte: rangeFin },
+        motivo: MotivoMovimiento.DEPOSITO_CIERRE,
+        deltaBanco: { gt: 0 },
+      },
+      select: { fecha: true, deltaBanco: true },
+    });
+
+    const depByDay: Record<string, { monto: number; cant: number }> = {};
+    let depPeriodoMonto = 0;
+    let depPeriodoCant = 0;
+
+    for (const m of depRows) {
+      const d = dayKey(m.fecha, spec);
+      if (!depByDay[d]) depByDay[d] = { monto: 0, cant: 0 };
+      depByDay[d].monto += N(m.deltaBanco);
+      depByDay[d].cant += 1;
+      depPeriodoMonto += N(m.deltaBanco);
+      depPeriodoCant += 1;
+    }
+
+    // 6) Armar filas por día (inicio, ingresos, egresos, final) + ventas/depósitos
     const rows = days.map((d) => {
-      const s = byDay[d.dayStr] || null;
+      const key = d.dayStr;
+      const s = byDay[key] || null;
       const sinSnapshot = !s;
 
-      const caja = {
-        inicio: 0, // global guarda totales del día; el “inicio” global no es tan útil → dejamos 0
-        ingresos: n(s?.ingresosTotalCaja),
-        egresos: n(s?.egresosTotalCaja),
-        final: n(s?.saldoTotalCaja),
-      };
-      const banco = {
-        inicio: 0,
-        ingresos: n(s?.ingresosTotalBanco),
-        egresos: n(s?.egresosTotalBanco),
-        final: n(s?.saldoTotalBanco),
-      };
+      // normaliza GLOBAL vs SUCURSAL
+      const ingresosCaja = s ? N(s.ingresosCaja ?? s.ingresosTotalCaja) : 0;
+      const egresosCaja = s ? N(s.egresosCaja ?? s.egresosTotalCaja) : 0;
+      const finalCaja = s ? N(s.saldoFinalCaja ?? s.saldoTotalCaja) : 0;
+
+      const ingresosBanco = s ? N(s.ingresosBanco ?? s.ingresosTotalBanco) : 0;
+      const egresosBanco = s ? N(s.egresosBanco ?? s.egresosTotalBanco) : 0;
+      const finalBanco = s ? N(s.saldoFinalBanco ?? s.saldoTotalBanco) : 0;
+
+      // inicio = final - ingresos + egresos
+      const inicioCaja = finalCaja - ingresosCaja + egresosCaja;
+      const inicioBanco = finalBanco - ingresosBanco + egresosBanco;
+
+      const ventasDia = ventasByDay[key] ?? { total: 0, count: 0 };
+      const depDia = depByDay[key] ?? { monto: 0, cant: 0 };
 
       return {
-        fecha: d.dayStr,
+        fecha: key,
         snapshotId: s?.id ?? null,
-        caja,
-        banco,
+        caja: {
+          inicio: inicioCaja,
+          ingresos: ingresosCaja,
+          egresos: egresosCaja,
+          final: finalCaja,
+        },
+        banco: {
+          inicio: inicioBanco,
+          ingresos: ingresosBanco,
+          egresos: egresosBanco,
+          final: finalBanco,
+        },
+        ventas: { total: ventasDia.total, cantidad: ventasDia.count },
+        depositos: { monto: depDia.monto, cantidad: depDia.cant }, // <- nombre alineado a tu interfaz
         flags: { sinSnapshot },
       };
     });
 
-    const sum = rows.reduce(
+    // 7) Resumen del período
+    const periodSummary = rows.reduce(
       (acc, r) => {
         acc.caja.ingresos += r.caja.ingresos;
         acc.caja.egresos += r.caja.egresos;
-        acc.caja.final += r.caja.final;
         acc.banco.ingresos += r.banco.ingresos;
         acc.banco.egresos += r.banco.egresos;
-        acc.banco.final += r.banco.final;
         return acc;
       },
       {
-        caja: { inicio: 0, ingresos: 0, egresos: 0, final: 0 },
-        banco: { inicio: 0, ingresos: 0, egresos: 0, final: 0 },
+        caja: { ingresos: 0, egresos: 0, final: rows.at(-1)?.caja.final ?? 0 },
+        banco: {
+          ingresos: 0,
+          egresos: 0,
+          final: rows.at(-1)?.banco.final ?? 0,
+        },
+      } as {
+        caja: { ingresos: number; egresos: number; final: number };
+        banco: { ingresos: number; egresos: number; final: number };
       },
     );
 
-    // Ranking simple por sucursal (opcional)
-    const topSucursalesRaw = await this.prisma.sucursalSaldoDiario.groupBy({
-      by: ['sucursalId'],
-      where: { fecha: { gte: days[0].inicio, lt: days[days.length - 1].fin } },
-      _sum: { saldoFinalCaja: true, saldoFinalBanco: true },
-      orderBy: { _sum: { saldoFinalBanco: 'desc' } },
-      take: 10,
-    });
-    const topSucursales = topSucursalesRaw.map((r) => ({
-      sucursalId: r.sucursalId,
-      cajaFinal: n(r._sum.saldoFinalCaja),
-      bancoFinal: n(r._sum.saldoFinalBanco),
-    }));
+    const periodEnd = {
+      cajaFinal: rows.at(-1)?.caja.final ?? 0,
+      bancoFinal: rows.at(-1)?.banco.final ?? 0,
+    };
+
+    // 8) Ranking por sucursal (solo en GLOBAL)
+    let topSucursales: Array<{
+      sucursalId: number;
+      cajaFinal: number;
+      bancoFinal: number;
+    }> = [];
+    if (sucursalId == null) {
+      const topRaw = await this.prisma.sucursalSaldoDiario.groupBy({
+        by: ['sucursalId'],
+        where: { fecha: { gte: rangeInicio, lte: rangeFin } },
+        _sum: { saldoFinalCaja: true, saldoFinalBanco: true },
+        orderBy: { _sum: { saldoFinalBanco: 'desc' } },
+        take: 10,
+      });
+      topSucursales = topRaw.map((r) => ({
+        sucursalId: r.sucursalId,
+        cajaFinal: N(r._sum.saldoFinalCaja),
+        bancoFinal: N(r._sum.saldoFinalBanco),
+      }));
+    }
 
     return {
-      rango: { from, to, tz },
+      scope: sucursalId != null ? 'SUCURSAL' : 'GLOBAL',
+      filtro: { from, to, tz, sucursalId: sucursalId ?? null },
       days: rows,
-      periodSummary: sum,
+      periodSummary: {
+        caja: periodSummary.caja,
+        banco: periodSummary.banco,
+        ventas: { total: ventasPeriodoTotal, cantidad: ventasPeriodoCount },
+        depositos: { monto: depPeriodoMonto, cantidad: depPeriodoCant },
+      },
+      periodEnd,
       topSucursales,
     };
   }

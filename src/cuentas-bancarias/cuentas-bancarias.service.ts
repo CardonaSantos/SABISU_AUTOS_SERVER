@@ -9,6 +9,7 @@ import { CreateCuentaBancariaDto } from './dto/create-cuenta-bancaria.dto';
 import { QueryCuentaBancariaDto } from './dto/query-cuenta-bancaria.dto';
 import { Prisma } from '@prisma/client';
 import { UpdateCuentaBancariaDto } from './dto/update-cuentas-bancaria.dto';
+import { CuentaBancariaResponseDto } from './dto/cuenta-bancaria-response.dto';
 
 @Injectable()
 export class CuentasBancariasService {
@@ -103,6 +104,7 @@ export class CuentasBancariasService {
           numero: dto.numero?.trim(),
           alias: dto.alias?.trim(),
           activa: dto.activa,
+          tipo: dto.tipo,
         },
       });
       return up;
@@ -176,15 +178,96 @@ export class CuentasBancariasService {
 
   async getCuentasBancariasSimple() {
     try {
-      const cuentas = await this.prisma.cuentaBancaria.findMany({});
+      const cuentas = await this.prisma.cuentaBancaria.findMany({
+        where: {
+          isDeleted: false,
+          activa: true,
+        },
+      });
       return cuentas.map((c) => ({
         id: c.id,
         nombre: c.alias,
+        alias: c.alias,
         numero: c.numero,
         banco: c.banco,
       }));
     } catch (error) {
       this.logger.debug('El error', error);
     }
+  }
+
+  async getResumenPage(query: QueryCuentaBancariaDto) {
+    const { page = 1, limit = 10, search, incluirInactivas } = query;
+    this.logger.log('Los params son: ', query);
+    const where: Prisma.CuentaBancariaWhereInput = {
+      AND: [
+        incluirInactivas ? {} : { activa: true },
+        search
+          ? {
+              OR: [
+                { banco: { contains: search, mode: 'insensitive' } },
+                { numero: { contains: search, mode: 'insensitive' } },
+                { alias: { contains: search, mode: 'insensitive' } },
+              ],
+            }
+          : {},
+      ],
+    };
+
+    // Traer las cuentas + counts
+    const cuentas = await this.prisma.cuentaBancaria.findMany({
+      where,
+      orderBy: [{ activa: 'desc' }, { banco: 'asc' }, { alias: 'asc' }],
+      skip: (page - 1) * limit,
+      take: Number(limit),
+      select: {
+        id: true,
+        banco: true,
+        numero: true,
+        alias: true,
+        tipo: true,
+        activa: true,
+        creadoEn: true,
+        actualizadoEn: true,
+        movimientos: {
+          select: { id: true, creadoEn: true, deltaBanco: true },
+        },
+      },
+    });
+
+    const total = await this.prisma.cuentaBancaria.count({ where });
+
+    // Mapear con saldo + último movimiento
+    const items: CuentaBancariaResponseDto[] = cuentas.map((c) => {
+      const saldoActual = c.movimientos.reduce(
+        (acc, m) => acc + Number(m.deltaBanco),
+        0,
+      );
+      const ultimoMovimiento = c.movimientos.length
+        ? c.movimientos.reduce((a, b) => (a.creadoEn > b.creadoEn ? a : b))
+            .creadoEn
+        : undefined;
+
+      return {
+        id: c.id,
+        banco: c.banco,
+        numero: c.numero,
+        alias: c.alias,
+        tipo: c.tipo,
+        activa: c.activa,
+        creadoEn: c.creadoEn,
+        actualizadoEn: c.actualizadoEn,
+        movimientosCount: c.movimientos.length,
+        saldoActual,
+        ultimoMovimiento,
+      };
+    });
+
+    return {
+      page,
+      limit,
+      total,
+      items,
+    };
   }
 }

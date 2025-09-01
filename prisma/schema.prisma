@@ -365,16 +365,22 @@ model VentaEliminadaProducto {
 
     creadoEn         DateTime   @default(now())
     actualizadoEn    DateTime   @updatedAt
-    // esAsientoVentas  Boolean   @default(false) // 👈 nuevo
+    esAsientoVentas  Boolean   @default(false) // 👈 nuevo
 
-    // @@unique([registroCajaId, referencia], map: "uq_movfin_turno_referencia") // 👈 idempotencia por turno
-    // @@index([registroCajaId, esAsientoVentas])                                  // 👈 útil para consultas
+    @@unique([registroCajaId, referencia], map: "uq_movfin_turno_referencia") // 👈 idempotencia por turno
+    @@index([registroCajaId, esAsientoVentas])                                  // 👈 útil para consultas
 
     @@index([sucursalId, fecha])
     @@index([registroCajaId])
     @@index([clasificacion, motivo])
     @@index([esDepositoCierre, esDepositoProveedor])
   }
+
+  enum TipoCuentaBancaria { 
+    AHORRO 
+    CORRIENTE 
+    TARJETA 
+    }
 
   model CuentaBancaria {
     id          Int      @id @default(autoincrement())
@@ -384,10 +390,12 @@ model VentaEliminadaProducto {
     activa      Boolean  @default(true)
 
     movimientos MovimientoFinanciero[]
-
+    tipo        TipoCuentaBancaria @default(CORRIENTE)
     creadoEn    DateTime @default(now())
     actualizadoEn DateTime @updatedAt
 
+    isDeleted Boolean @default(false)
+    eliminadoEn DateTime? // soft delete
     @@unique([banco, numero])
   }
 
@@ -415,6 +423,7 @@ model VentaEliminadaProducto {
     AJUSTE_SOBRANTE
     AJUSTE_FALTANTE
     DEVOLUCION
+    BANCO_A_CAJA   //nuevo
   }
 
 

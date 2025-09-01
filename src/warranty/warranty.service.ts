@@ -20,6 +20,7 @@ import { HistorialStockTrackerService } from 'src/historial-stock-tracker/histor
 import {
   EstadoDetalleVenta,
   EstadoGarantia,
+  Prisma,
   TipoMovimientoStock,
 } from '@prisma/client';
 import { GarantiaDto } from './interfaces';
@@ -56,116 +57,108 @@ export class WarrantyService {
       comentario,
     } = createWarrantyDto;
 
+    if (!clienteId) {
+      throw new BadRequestException(
+        'Una garantía no se puede registrar a una venta con CF',
+      );
+    }
+
     if (!clienteId || !productoId || !ventaId || !usuarioIdRecibe) {
       throw new BadRequestException(
         'Faltan datos necesarios para crear la garantía',
       );
     }
+    if (!sucursalId) {
+      throw new BadRequestException('Sucursal requerida para la garantía');
+    }
+    if (!cantidadDevuelta || cantidadDevuelta <= 0) {
+      throw new BadRequestException('Cantidad devuelta inválida');
+    }
 
-    // 1. Transacción atómica
-    const garantiaConRegistros = await this.prisma.$transaction(async (tx) => {
-      // 2. Crear garantía
-      const garantia = await tx.garantia.create({
-        data: {
-          venta: { connect: { id: ventaId } },
-          producto: { connect: { id: productoId } },
-          cliente: { connect: { id: clienteId } },
-          sucursal: sucursalId ? { connect: { id: sucursalId } } : undefined,
-          usuarioRecibe: { connect: { id: usuarioIdRecibe } },
-          cantidadDevuelta,
-          descripcionProblema,
-          comentario,
-          estado: EstadoGarantia.RECIBIDO,
-          fechaRecepcion: dayjs().tz('America/Guatemala').toDate(),
+    const nowGT = dayjs().tz('America/Guatemala').toDate();
+
+    try {
+      const garantiaConRegistros = await this.prisma.$transaction(
+        async (tx) => {
+          // 1) Validar que exista el item de venta y que la cantidad sea coherente con devoluciones abiertas
+          const ventaProd = await tx.ventaProducto.findFirst({
+            where: { ventaId, productoId },
+            select: { id: true, cantidad: true, precioVenta: true },
+          });
+          if (!ventaProd) {
+            throw new BadRequestException(
+              `No existe item venta ${ventaId}/${productoId}`,
+            );
+          }
+
+          // Cantidad ya devuelta en garantías NO CERRADAS
+          const agg = await tx.garantia.aggregate({
+            _sum: { cantidadDevuelta: true },
+            where: {
+              ventaId,
+              productoId,
+              estado: { not: EstadoGarantia.CERRADO },
+            },
+          });
+          const yaDevuelto = Number(agg._sum.cantidadDevuelta ?? 0);
+          const maxDevolvible = ventaProd.cantidad - yaDevuelto;
+          if (cantidadDevuelta > maxDevolvible) {
+            throw new BadRequestException(
+              `Cantidad devuelta (${cantidadDevuelta}) excede el máximo (${maxDevolvible}).`,
+            );
+          }
+
+          // 2) Crear garantía (RECIBIDO)
+          const garantia = await tx.garantia.create({
+            data: {
+              venta: { connect: { id: ventaId } },
+              producto: { connect: { id: productoId } },
+              cliente: { connect: { id: clienteId } },
+              sucursal: { connect: { id: sucursalId } },
+              usuarioRecibe: { connect: { id: usuarioIdRecibe } },
+              cantidadDevuelta,
+              descripcionProblema,
+              comentario,
+              estado: EstadoGarantia.RECIBIDO,
+              fechaRecepcion: nowGT,
+            },
+          });
+
+          // 3) Registro de timeline inicial
+          await tx.registroGarantia.create({
+            data: {
+              garantia: { connect: { id: garantia.id } },
+              usuario: { connect: { id: usuarioIdRecibe } },
+              estado: EstadoGarantia.RECIBIDO,
+              accionesRealizadas: 'Recepción de garantía',
+              fechaRegistro: nowGT,
+            },
+          });
+
+          // (Opcional) Si quieres marcar el detalle como "PARCIAL_GARANTIA" sin tocar su cantidad:
+          // await tx.ventaProducto.update({ where: { id: ventaProd.id }, data: { estado: 'PARCIAL_GARANTIA' } });
+
+          return tx.garantia.findUnique({
+            where: { id: garantia.id },
+            include: { registros: true },
+          });
         },
-      });
-
-      // 3. Ajustar inventario (sumar devolución)
-      const lote = await tx.stock.findFirst({
-        where: { productoId, sucursalId },
-        orderBy: { fechaIngreso: 'desc' },
-      });
-      if (!lote) {
-        throw new BadRequestException(
-          `No hay lote de stock para producto ${productoId} en sucursal ${sucursalId}`,
-        );
-      }
-      await tx.stock.update({
-        where: { id: lote.id },
-        data: { cantidad: { increment: cantidadDevuelta } },
-      });
-      // (Opcional: tracker)
-      await this.tracker.trackerGarantia(
-        tx,
-        productoId,
-        sucursalId,
-        usuarioIdRecibe,
-        garantia.id,
-        TipoMovimientoStock.GARANTIA,
-        'Ingreso por garantía',
-        lote.cantidad,
-        cantidadDevuelta,
       );
 
-      // 4. Ajustar venta
-      const ventaProd = await tx.ventaProducto.findFirst({
-        where: { ventaId, productoId },
-      });
-      if (!ventaProd) {
-        throw new BadRequestException(
-          `El ítem de venta no existe para venta ${ventaId} / producto ${productoId}`,
-        );
-      }
-      await tx.ventaProducto.update({
-        where: { id: ventaProd.id },
-        data: {
-          cantidad: ventaProd.cantidad - cantidadDevuelta,
-          estado: 'PARCIAL_GARANTIA',
-        },
-      });
-
-      // Recalcular total de la venta
-      const items = await tx.ventaProducto.findMany({ where: { ventaId } });
-      const nuevoTotal = items.reduce(
-        (sum, i) => sum + i.cantidad * i.precioVenta,
-        0,
+      return garantiaConRegistros!;
+    } catch (error) {
+      this.logger.error('El error es: ', error);
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException(
+        'Fatal error: Error inesperado en registrar garantía',
       );
-      await tx.venta.update({
-        where: { id: ventaId },
-        data: {
-          totalVenta: {
-            decrement: nuevoTotal,
-          },
-        },
-      });
-
-      // 5. Crear registro de timeline inicial
-      await tx.registroGarantia.create({
-        data: {
-          garantia: { connect: { id: garantia.id } },
-          usuario: { connect: { id: usuarioIdRecibe } },
-          estado: EstadoGarantia.RECIBIDO,
-          accionesRealizadas: 'Ingreso al inventario por garantía',
-          fechaRegistro: dayjs().tz('America/Guatemala').toDate(),
-        },
-      });
-
-      // 6. Recuperar la garantía con sus registros para devolverla
-      return tx.garantia.findUnique({
-        where: { id: garantia.id },
-        include: { registros: true },
-      });
-    });
-
-    return garantiaConRegistros!;
+    }
   }
 
   async createNewTimeLime(dto: createNewTimeLimeDTO) {
     try {
-      this.logger.log('La data llegando es: ', dto);
       const { conclusion, accionesRealizadas, estado, garantiaID, userID } =
         dto;
-
       if (
         [conclusion, accionesRealizadas, estado, garantiaID, userID].some(
           (p) => p == null,
@@ -175,7 +168,7 @@ export class WarrantyService {
       }
 
       return await this.prisma.$transaction(async (tx) => {
-        // 1) Crear registro de timeline
+        // 1) Nuevo registro de timeline
         const newTimeLine = await tx.registroGarantia.create({
           data: {
             garantia: { connect: { id: garantiaID } },
@@ -183,110 +176,164 @@ export class WarrantyService {
             estado,
             accionesRealizadas,
             conclusion,
+            fechaRegistro: dayjs().tz('America/Guatemala').toDate(),
           },
         });
 
-        // 2) Actualizar estado principal de la garantía
+        // 2) Actualizar estado principal
         const garantiaMain = await tx.garantia.update({
           where: { id: garantiaID },
-          data: { estado: estado },
+          data: { estado },
+          include: {
+            venta: { select: { id: true, sucursalId: true } },
+            producto: { select: { id: true } },
+          },
         });
 
-        // Si se va a cerrar, chequeamos el estado previo
+        // 3) Si se va a CERRAR, aplicar efectos según el estado PREVIO
         if (estado === EstadoGarantia.CERRADO) {
-          const estadosQueCierran: EstadoGarantia[] = [
-            EstadoGarantia.REPARADO,
-            EstadoGarantia.REEMPLAZADO,
-            EstadoGarantia.RECHAZADO_CLIENTE,
-            EstadoGarantia.CANCELADO,
-          ];
+          // Tomar el estado previo (penúltimo registro)
           const regs = await tx.registroGarantia.findMany({
             where: { garantiaId: garantiaID },
             orderBy: { fechaRegistro: 'asc' },
             select: { estado: true },
           });
-          const previo = regs[regs.length - 2]?.estado;
-          if (!estadosQueCierran.includes(previo)) {
+          const previo = regs[regs.length - 2]?.estado as
+            | EstadoGarantia
+            | undefined;
+
+          const validos: EstadoGarantia[] = [
+            EstadoGarantia.REPARADO,
+            EstadoGarantia.REEMPLAZADO,
+            EstadoGarantia.RECHAZADO_CLIENTE,
+            EstadoGarantia.CANCELADO,
+          ];
+          if (!previo || !validos.includes(previo)) {
             throw new BadRequestException(
-              `Sólo se puede cerrar desde: ${estadosQueCierran.join(', ')}`,
+              `Sólo se puede cerrar desde: ${validos.join(', ')}`,
             );
           }
 
-          // --- NUEVOS CASOS ---
+          // Cargar item de venta y precio unitario
+          const ventaProd = await tx.ventaProducto.findFirst({
+            where: {
+              ventaId: garantiaMain.ventaId,
+              productoId: garantiaMain.productoId,
+            },
+          });
+          if (!ventaProd) {
+            throw new BadRequestException(
+              'No se encontró el ítem de venta a ajustar',
+            );
+          }
+
+          // Acciones por estado previo
           switch (previo) {
-            case EstadoGarantia.REPARADO:
-            case EstadoGarantia.REEMPLAZADO:
-            case EstadoGarantia.CANCELADO:
-              this.logger.log(
-                `${previo} → revirtiendo garantía: saco del stock y restauro la venta`,
-              );
-              // 1) Sacar del inventario la unidad que entró por garantía
-              const loteARetirar = await tx.stock.findFirst({
+            case EstadoGarantia.REPARADO: {
+              // Sin impacto financiero. Si mantuviste un “ingreso virtual” de stock en crear(),
+              // aquí harías la salida para devolver al cliente (mantener inventario balanceado).
+              // Ejemplo de salida (opcional):
+              // await salidaDesdeGarantia(tx, garantiaMain, userID);
+              await tx.ventaProducto.update({
+                where: { id: ventaProd.id },
+                data: { estado: 'GARANTIA_REPARADO' },
+              });
+              break;
+            }
+
+            case EstadoGarantia.REEMPLAZADO: {
+              // Entregas una unidad nueva al cliente => salida de inventario normal
+              const lote = await tx.stock.findFirst({
                 where: {
                   productoId: garantiaMain.productoId,
                   sucursalId: garantiaMain.sucursalId,
                 },
                 orderBy: { fechaIngreso: 'desc' },
               });
-              if (!loteARetirar) {
+              if (!lote || lote.cantidad < garantiaMain.cantidadDevuelta) {
                 throw new BadRequestException(
-                  `No hay stock para retirar la garantía ${garantiaID}`,
+                  'Stock insuficiente para reemplazo',
                 );
               }
+
               await tx.stock.update({
-                where: { id: loteARetirar.id },
+                where: { id: lote.id },
                 data: {
                   cantidad: { decrement: garantiaMain.cantidadDevuelta },
                 },
               });
 
-              // 2) Restaurar la venta
-              const ventaARestaurar = await tx.ventaProducto.findFirst({
-                where: {
-                  ventaId: garantiaMain.ventaId,
-                  productoId: garantiaMain.productoId,
-                },
-              });
-              if (!ventaARestaurar) {
-                throw new BadRequestException(
-                  'No se encontró el ítem de venta a ajustar',
-                );
-              }
-              await tx.ventaProducto.update({
-                where: { id: ventaARestaurar.id },
-                data: {
-                  cantidad: { increment: garantiaMain.cantidadDevuelta },
-                  estado: 'VENDIDO',
-                },
-              });
-
-              // 3) Recalcular total
-              const itemsRestaurados = await tx.ventaProducto.findMany({
-                where: { ventaId: garantiaMain.ventaId },
-              });
-              const totalRestaurado = itemsRestaurados.reduce(
-                (sum, i) => sum + i.cantidad * i.precioVenta,
-                0,
+              // Tracker: salida por reemplazo
+              await this.tracker.trackerGarantia(
+                tx,
+                garantiaMain.productoId,
+                garantiaMain.sucursalId!,
+                userID,
+                garantiaID,
+                TipoMovimientoStock.GARANTIA,
+                'Entrega de reemplazo por garantía',
+                lote.cantidad,
+                -garantiaMain.cantidadDevuelta,
               );
+
+              await tx.ventaProducto.update({
+                where: { id: ventaProd.id },
+                data: { estado: 'REEMPLAZADO' },
+              });
+              // Venta NO cambia (se mantiene el ingreso original).
+              break;
+            }
+
+            case EstadoGarantia.CANCELADO: {
+              // Reembolso: CONTRAVENTA / DEVOLUCION
+              // 1) Ajuste por DELTA al total de la venta
+              const deltaMonto =
+                Number(ventaProd.precioVenta) * garantiaMain.cantidadDevuelta;
+
               await tx.venta.update({
                 where: { id: garantiaMain.ventaId },
-                data: { totalVenta: totalRestaurado },
+                data: { totalVenta: { decrement: deltaMonto } },
               });
-              break;
 
-            case EstadoGarantia.RECHAZADO_CLIENTE:
-              this.logger.log(
-                'RECHAZADO_CLIENTE → no se toca nada: el cliente se queda con el producto defectuoso',
-              );
+              await tx.ventaProducto.update({
+                where: { id: ventaProd.id },
+                data: { estado: 'REEMBOLSADO' as any }, // tu enum: REEMBOLSADO/REEMBOLSADO
+              });
+
+              // 2) Movimiento financiero (flujo de salida al cliente)
+              // Si decides devolver por EFECTIVO, usa deltaCaja; si es transferencia, usa deltaBanco + cuentaBancariaId.
+              await tx.movimientoFinanciero.create({
+                data: {
+                  fecha: dayjs().tz('America/Guatemala').toDate(),
+                  sucursal: { connect: { id: garantiaMain.sucursalId! } },
+                  clasificacion: 'CONTRAVENTA',
+                  motivo: 'DEVOLUCION',
+                  deltaCaja: new Prisma.Decimal(-deltaMonto), // efectivo (ajústalo según tu método real)
+                  deltaBanco: new Prisma.Decimal(0),
+                  descripcion: `Devolución garantía #${garantiaID}`,
+                  referencia: `GAR-${garantiaID}`,
+                  usuario: { connect: { id: userID } },
+                  // cuentaBancaria: { connect: { id: cuentaX } } // si reembolsas por banco
+                },
+              });
+
+              // 3) Inventario: si decides regresar ese producto al stock vendible:
+              // const lote = await tx.stock.findFirst({ ... });
+              // await tx.stock.update({ ... increment: garantiaMain.cantidadDevuelta });
               break;
+            }
+
+            case EstadoGarantia.RECHAZADO_CLIENTE: {
+              // No se realizan cambios
+              break;
+            }
           }
         }
 
-        this.logger.log('El nuevo registro de timeline es: ', newTimeLine);
         return newTimeLine;
       });
     } catch (error) {
-      this.logger.error('El error es: ', error);
+      this.logger.error('Error timeline garantía: ', error);
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException({
         message: 'Fatal Error: Error inesperado creando registro timeline',

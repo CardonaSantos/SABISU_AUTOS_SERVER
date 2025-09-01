@@ -34,7 +34,7 @@ export class CajaController {
 
   @Post('/cerrar-v2')
   cerrarCajaAdvanced(@Body() dto: CerrarCajaV2Dto) {
-    return this.cajaService.cerrarCajaV2(dto);
+    // return this.cajaService.cerrarCajaV2(dto);
   }
 
   @Post('/cerrar-v3')
