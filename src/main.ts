@@ -7,8 +7,8 @@ async function bootstrap() {
 
   app.enableCors({
     origin: [
+      'https://sabisu-auto.up.railway.app',
       'http://localhost:5173',
-      'http://127.0.0.1:5173',
       // agrega aquí cualquier otro origin de tu front (p.ej. http://localhost:3001)
     ],
     credentials: true, // <- para cookies/withCredentials
